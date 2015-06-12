@@ -16,10 +16,10 @@ cbuffer OBJECT : register(b1) {
 	float4x4 view;
 	float4x4 projection;
 
-	float4x4 cube;
+	float4x4 skybox;
 	float4x4 grid;
 	float4x4 star;
-	float4x4 ground;
+	float4x4 cube;
 };
 
 OUTPUT_VERTEX main(INPUT_VERTEX fromVertexBuffer)

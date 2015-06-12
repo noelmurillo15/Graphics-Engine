@@ -23,26 +23,25 @@
 #define BUFFER_WIDTH	1280
 #define BUFFER_HEIGHT	768
 
-	//	Temp Globals
-cbPerObject cbPerObj;
-
 
 class GraphicsProject {
 
-		//	Application data
+	//	Application data
 	HINSTANCE				application;
 	WNDPROC					appWndProc;
 	HWND					window;
 
-		//	D3D11 Data
+	//	D3D11 Data
+	D3D11_VIEWPORT			viewport;
 	IDXGISwapChain*			swapChain = nullptr;
 	ID3D11Device*			device = nullptr;
 	ID3D11DeviceContext*	devContext = nullptr;
 	ID3D11RenderTargetView* rtView = nullptr;
-	
+
 	ID3D11InputLayout*		iLayout_Grid = nullptr;
 	ID3D11InputLayout*		iLayout_Skybox = nullptr;
 	ID3D11InputLayout*		iLayout_Star = nullptr;
+	ID3D11InputLayout*		vertLayout = nullptr;
 
 	ID3D11Buffer*			cbuffer = nullptr;
 	ID3D11Buffer*			vbuffer_Grid = nullptr;
@@ -51,70 +50,56 @@ class GraphicsProject {
 	ID3D11Buffer*			ibuffer_Skybox = nullptr;
 	ID3D11Buffer*			vbuffer_Star = nullptr;
 	ID3D11Buffer*			ibuffer_Star = nullptr;
+	ID3D11Buffer*			CubeIndexBuffer = nullptr;
+	ID3D11Buffer*			CubeVertexBuffer = nullptr;
+	
+	ID3D10Blob*				VS_Buffer = nullptr;
+	ID3D10Blob*				PS_Buffer = nullptr;
 
+	ID3D11VertexShader*		VS = nullptr;
 	ID3D11VertexShader*		vShader_Grid = nullptr;
-	ID3D11PixelShader*		pShader_Grid = nullptr;
-	ID3D11VertexShader*		vShader_Skybox = nullptr;
-	ID3D11PixelShader*		pShader_Skybox = nullptr;
 	ID3D11VertexShader*		vShader_Star = nullptr;
+	ID3D11VertexShader*		vShader_Skybox = nullptr;
+
+	ID3D11PixelShader*		PS = nullptr;
+	ID3D11PixelShader*		pShader_Grid = nullptr;
 	ID3D11PixelShader*		pShader_Star = nullptr;
-
-	ID3D11ShaderResourceView* potsrv = nullptr;
-	ID3D11Texture2D*		skyboxTexture = nullptr;
-	ID3D11BlendState*		textureBlendState = nullptr;
-
-	ID3D11DepthStencilView* dsView = nullptr;
-	ID3D11DepthStencilState*dsState = nullptr;
-	ID3D11Texture2D*		depthStencil = nullptr;
-	ID3D11SamplerState*		samplerState = nullptr;
+	ID3D11PixelShader*		pShader_Skybox = nullptr;
 
 	ID3D11RasterizerState*	rState_B_AA = nullptr;
 	ID3D11RasterizerState*	rState_B = nullptr;
 	ID3D11RasterizerState*	rState_F_AA = nullptr;
 	ID3D11RasterizerState*	rState_F = nullptr;
-
 	ID3D11RasterizerState*	rState_Wire = nullptr;
 
-	D3D11_VIEWPORT			viewport;
+	ID3D11ShaderResourceView* srvSkybox = nullptr;
+	ID3D11ShaderResourceView* srvCube = nullptr;
 
-	ID3D11InputLayout*		iLayout_ = nullptr;
+	ID3D11Texture2D*		skyboxTexture = nullptr;
+	ID3D11Texture2D*		depthStencil = nullptr;
 
+	ID3D11DepthStencilView* dsView = nullptr;
+	ID3D11DepthStencilState*dsState = nullptr;
 
-	//	TESTING	//	
-	ID3D11Buffer*			CubeIndexBuffer = nullptr;
-	ID3D11Buffer*			CubeVertexBuffer = nullptr;
-	ID3D11VertexShader*		VS = nullptr;
-	ID3D11PixelShader*		PS = nullptr;
-	ID3D10Blob*				VS_Buffer = nullptr;
-	ID3D10Blob*				PS_Buffer = nullptr;
-	ID3D11InputLayout*		vertLayout = nullptr;
-	ID3D11Buffer*			cbPerObjBuffer = nullptr;
-	ID3D11ShaderResourceView* CubeTexture = nullptr;
+	ID3D11SamplerState*		samplerState = nullptr;
 	ID3D11SamplerState*		CubeSamplerState = nullptr;
+	
+	ID3D11BlendState*		textureBlendState = nullptr;
 
-
-
-		//	Input Data
+	//	Input Data
 	IDirectInputDevice8*	DIKeyboard;
 	IDirectInputDevice8*	DIMouse;
 
 	DIMOUSESTATE			mouseLastState;
 	LPDIRECTINPUT8			DirectInput;
 
-		//	Systems Data
+	//	Systems Data
 	FPSClass				fpsTracker;
 	TimerClass				timeTracker;
 	CpuClass				cpuTracker;
 
-		//	Camera
+	//	Camera
 	OBJECT					cam_obj;
-
-		//	Objects
-	SIMPLE_VERTEX			Grid[400];
-	unsigned int			iGrid[80];
-
-	SIMPLE_VERTEX			Star[20];
-	unsigned int			iStar[108];
 
 public:
 
@@ -131,10 +116,10 @@ public:
 	bool InitDirectInput(HINSTANCE hInstance);
 };
 
-	GraphicsProject* pApp = nullptr;
+GraphicsProject* pApp = nullptr;
 
 GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
-	
+
 	//	Create All the Things!
 	HRESULT result;
 
@@ -236,26 +221,28 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	cam_obj.skybox = Identity();
 	cam_obj.grid = Identity();
 	cam_obj.star = Identity();
-	cam_obj.ground = Identity();
+	cam_obj.cube = Identity();
 
 	float ar = abs((float)BUFFER_WIDTH / (float)BUFFER_HEIGHT);
 	cam_obj.proj = CreateProjectionMatrix(100.0f, 0.1f, 72, ar);
 
 	cam_obj.view = Translate(cam_obj.view, 0.5f, 0.5f, -0.85f);	//	back up
 	cam_obj.view = FastInverse(cam_obj.view);	//	make this ho a camera
-	
+
 	cam_obj.skybox = Scale_4x4(cam_obj.skybox, 20.0f, 20.0f, 20.0f); // skybox EXPAND
 	cam_obj.skybox = Translate(cam_obj.skybox, 0.0f, -10.0f, 0.0f);
 
 	cam_obj.star = Scale_4x4(cam_obj.star, 0.2f, 0.2f, 0.2f); // star SHRINK
-	cam_obj.star = Translate(cam_obj.star, 0.5f, 0.5f, 0.5f);
+	cam_obj.star = Translate(cam_obj.star, 0.5f, 0.8f, 0.5f);
 
-	cam_obj.ground = Scale_4x4(cam_obj.ground, 1.0f, 1.0f, 1.0f);
-	cam_obj.ground = Translate(cam_obj.ground, 0, 0, 10);
-
+	cam_obj.cube = Scale_4x4(cam_obj.cube, 0.2f, 0.2f, 0.2f);
+	cam_obj.cube = Translate(cam_obj.cube, 0.5f, 0.21f, 0.5f);
 #pragma endregion
 
 #pragma region Grid Setup
+	SIMPLE_VERTEX			Grid[400];
+	unsigned int			iGrid[80];
+
 	for (int x = 0; x < 20; ++x){
 		for (int y = 0; y < 20; ++y){
 			int index = Convert2D_1D(y, x, 20);
@@ -310,6 +297,9 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 #pragma endregion
 
 #pragma region Star Setup
+	SIMPLE_VERTEX			Star[20];
+	unsigned int			iStar[108];
+
 	Star[0].pos = Star[10].pos = { 0, 1 };
 	Star[1].pos = Star[11].pos = { 0.4f, 0.2f };
 	Star[2].pos = Star[12].pos = { 1, 0 };
@@ -416,6 +406,91 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	iStar[104] = 16;	iStar[107] = 6;
 #pragma endregion
 
+#pragma region Cube Setup
+	VERTEX Cube[] =
+	{
+		// Front Face
+		VERTEX(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
+		VERTEX(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
+		VERTEX(1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
+		VERTEX(1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+
+		// Back Face
+		VERTEX(-1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
+		VERTEX(1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
+		VERTEX(1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
+		VERTEX(-1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
+
+		// Top Face
+		VERTEX(-1.0f, 1.0f, -1.0f, 0.0f, 1.0f),
+		VERTEX(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
+		VERTEX(1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
+		VERTEX(1.0f, 1.0f, -1.0f, 1.0f, 1.0f),
+
+		// Bottom Face
+		VERTEX(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+		VERTEX(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
+		VERTEX(1.0f, -1.0f, 1.0f, 0.0f, 0.0f),
+		VERTEX(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f),
+
+		// Left Face
+		VERTEX(-1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
+		VERTEX(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
+		VERTEX(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
+		VERTEX(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+
+		// Right Face
+		VERTEX(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
+		VERTEX(1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
+		VERTEX(1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
+		VERTEX(1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
+	};
+
+	UINT iCube[] = {
+		// Front Face
+		0, 1, 2,
+		0, 2, 3,
+
+		// Back Face
+		4, 5, 6,
+		4, 6, 7,
+
+		// Top Face
+		8, 9, 10,
+		8, 10, 11,
+
+		// Bottom Face
+		12, 13, 14,
+		12, 14, 15,
+
+		// Left Face
+		16, 17, 18,
+		16, 18, 19,
+
+		// Right Face
+		20, 21, 22,
+		20, 22, 23
+	};
+#pragma endregion
+
+#pragma region InputLayer
+	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[2];
+	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+
+	D3D11_INPUT_ELEMENT_DESC vLayout_Grid[2];
+	vLayout_Grid[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	vLayout_Grid[1] = { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+
+	D3D11_INPUT_ELEMENT_DESC vLayout_Star[2];
+	vLayout_Star[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	vLayout_Star[1] = { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+
+	D3D11_INPUT_ELEMENT_DESC layout[2];
+	layout[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	layout[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+#pragma endregion
+
 #pragma region VertexBuffer
 		//	grid
 	D3D11_BUFFER_DESC vbuffDesc_grid;
@@ -449,20 +524,17 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	D3D11_SUBRESOURCE_DATA vsubData_star;
 	ZeroMemory(&vsubData_star, sizeof(D3D11_SUBRESOURCE_DATA));
 	vsubData_star.pSysMem = Star;
-#pragma endregion
 
-#pragma region InputLayer
-	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[2];
-	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+		//	cube
+	D3D11_BUFFER_DESC vertexBufferDesc;
+	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	vertexBufferDesc.ByteWidth = sizeof(VERTEX) * 24;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 
-	D3D11_INPUT_ELEMENT_DESC vLayout_Grid[2];
-	vLayout_Grid[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	vLayout_Grid[1] = { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-
-	D3D11_INPUT_ELEMENT_DESC vLayout_Star[2];
-	vLayout_Star[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	vLayout_Star[1] = { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	D3D11_SUBRESOURCE_DATA vertBufferData;
+	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
+	vertBufferData.pSysMem = Cube;
 #pragma endregion
 
 #pragma region ConstBuffer
@@ -479,6 +551,7 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 #pragma endregion
 
 #pragma region IndexBuffer
+		//	grid
 	D3D11_BUFFER_DESC iBuffdesc_grid;
 	ZeroMemory(&iBuffdesc_grid, sizeof(D3D11_BUFFER_DESC));
 	iBuffdesc_grid.Usage = D3D11_USAGE_DEFAULT;
@@ -489,6 +562,7 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	ZeroMemory(&isubData_grid, sizeof(D3D11_SUBRESOURCE_DATA));
 	isubData_grid.pSysMem = &iGrid;
 
+		//	skybox
 	D3D11_BUFFER_DESC iBuffdesc_skybox;
 	ZeroMemory(&iBuffdesc_skybox, sizeof(D3D11_BUFFER_DESC));
 	iBuffdesc_skybox.Usage = D3D11_USAGE_DEFAULT;
@@ -499,6 +573,7 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	ZeroMemory(&isubData_skybox, sizeof(D3D11_SUBRESOURCE_DATA));
 	isubData_skybox.pSysMem = &Cube_indicies;
 
+		//	star
 	D3D11_BUFFER_DESC iBuffdesc_star;
 	ZeroMemory(&iBuffdesc_star, sizeof(D3D11_BUFFER_DESC));
 	iBuffdesc_star.Usage = D3D11_USAGE_DEFAULT;
@@ -508,6 +583,17 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	D3D11_SUBRESOURCE_DATA isubData_star;
 	ZeroMemory(&isubData_star, sizeof(D3D11_SUBRESOURCE_DATA));
 	isubData_star.pSysMem = &iStar;
+
+		//	cube
+	D3D11_BUFFER_DESC indexBufferDesc;
+	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	indexBufferDesc.ByteWidth = sizeof(UINT) * 12 * 3;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+	D3D11_SUBRESOURCE_DATA iinitData;
+	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
+	iinitData.pSysMem = iCube;
 #pragma endregion
 
 #pragma region DepthStencil
@@ -549,7 +635,8 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	stencilSubdata_star.SysMemSlicePitch = sizeof(iStar);
 #pragma endregion
 
-#pragma region skyboxTexture
+#pragma region Load Textures
+		//	skybox
 	D3D11_TEXTURE2D_DESC textureDesc;
 	ZeroMemory(&textureDesc, sizeof(D3D11_TEXTURE2D_DESC));
 	textureDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -561,13 +648,16 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	textureDesc.ArraySize = 1;
 	textureDesc.SampleDesc.Count = 1;
 
-	D3D11_SUBRESOURCE_DATA textureSubdata[stars_numlevels];	
+	D3D11_SUBRESOURCE_DATA textureSubdata[stars_numlevels];
 	ZeroMemory(&textureSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 
 	for (int i = 0; i < stars_numlevels; i++){
 		textureSubdata[i].pSysMem = &stars_pixels[stars_leveloffsets[i]];
 		textureSubdata[i].SysMemPitch = sizeof(unsigned int) * (stars_width >> i);
 	}
+
+		//	cube
+	result = D3DX11CreateShaderResourceViewFromFile(device, L"grass.jpg", NULL, NULL, &srvCube, NULL);
 #pragma endregion
 
 #pragma region SamplerState
@@ -581,6 +671,16 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	samplerDesc.MaxLOD = (FLT_MAX);
 	samplerDesc.MaxAnisotropy = 1;
 	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+
+	D3D11_SAMPLER_DESC sampDesc;
+	ZeroMemory(&sampDesc, sizeof(sampDesc));
+	sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.MinLOD = 0;
+	sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 #pragma endregion
 
 #pragma region Blendstate
@@ -637,163 +737,45 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	viewport.MaxDepth = 1.0f;
 #pragma endregion
 
-#pragma region Cube Setup
-
+#pragma region Compile .fx Shaders
 	result = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "main", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
 	result = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
-
-	D3D11_INPUT_ELEMENT_DESC layout[2];
-	layout[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	layout[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-
-
-	VERTEX v[] =
-	{
-		// Front Face
-		VERTEX(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-		VERTEX(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
-		VERTEX(1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
-		VERTEX(1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
-
-		// Back Face
-		VERTEX(-1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
-		VERTEX(1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
-		VERTEX(1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
-		VERTEX(-1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
-
-		// Top Face
-		VERTEX(-1.0f, 1.0f, -1.0f, 0.0f, 1.0f),
-		VERTEX(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
-		VERTEX(1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
-		VERTEX(1.0f, 1.0f, -1.0f, 1.0f, 1.0f),
-
-		// Bottom Face
-		VERTEX(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
-		VERTEX(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-		VERTEX(1.0f, -1.0f, 1.0f, 0.0f, 0.0f),
-		VERTEX(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f),
-
-		// Left Face
-		VERTEX(-1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
-		VERTEX(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
-		VERTEX(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
-		VERTEX(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
-
-		// Right Face
-		VERTEX(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-		VERTEX(1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
-		VERTEX(1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
-		VERTEX(1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
-	};
-
-	UINT indices[] = {
-		// Front Face
-		0, 1, 2,
-		0, 2, 3,
-
-		// Back Face
-		4, 5, 6,
-		4, 6, 7,
-
-		// Top Face
-		8, 9, 10,
-		8, 10, 11,
-
-		// Bottom Face
-		12, 13, 14,
-		12, 14, 15,
-
-		// Left Face
-		16, 17, 18,
-		16, 18, 19,
-
-		// Right Face
-		20, 21, 22,
-		20, 22, 23
-	};
-
-
-	D3D11_BUFFER_DESC indexBufferDesc;
-	ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
-
-	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
-	indexBufferDesc.ByteWidth = sizeof(UINT) * 12 * 3;
-	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	indexBufferDesc.CPUAccessFlags = 0;
-	indexBufferDesc.MiscFlags = 0;
-
-	D3D11_SUBRESOURCE_DATA iinitData;
-
-	iinitData.pSysMem = indices;
-	device->CreateBuffer(&indexBufferDesc, &iinitData, &CubeIndexBuffer);
-
-	D3D11_BUFFER_DESC vertexBufferDesc;
-	ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
-	vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
-	vertexBufferDesc.ByteWidth = sizeof(VERTEX) * 24;
-	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-
-	D3D11_SUBRESOURCE_DATA vertBufferData;
-	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
-	vertBufferData.pSysMem = v;
-
-	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &CubeVertexBuffer);
-
-	result = D3DX11CreateShaderResourceViewFromFile(device, L"grass.jpg", NULL, NULL, &CubeTexture, NULL);
-
-	D3D11_SAMPLER_DESC sampDesc;
-	ZeroMemory(&sampDesc, sizeof(sampDesc));
-	sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-	sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-	sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-	sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-	sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-	sampDesc.MinLOD = 0;
-	sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-
-	result = device->CreateSamplerState(&sampDesc, &CubeSamplerState);
-
-	UINT elements = ARRAYSIZE(layout);
-	result = device->CreateInputLayout(layout, elements, VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertLayout);
-
-	D3D11_BUFFER_DESC cbbd;
-	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
-	cbbd.Usage = D3D11_USAGE_DEFAULT;
-	cbbd.ByteWidth = sizeof(cbPerObject);
-	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-
-	result = device->CreateBuffer(&cbbd, NULL, &cbPerObjBuffer);
-
-	result = device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);
-	result = device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);
 #pragma endregion
 
 
-	result = device->CreateBuffer(&constBufferDesc, &constSubData, &cbuffer);	//	CBuffer	grid
-	result = device->CreateBuffer(&vbuffDesc_grid, &vsubData_grid, &vbuffer_Grid);	//	VBuffer grid
-	result = device->CreateBuffer(&iBuffdesc_grid, &isubData_grid, &ibuffer_Grid);	//	IBuffer	grid
-	result = device->CreateBuffer(&vbuffDesc_skybox, &vsubData_skybox, &vbuffer_Skybox);	//	VBuffer skybox
-	result = device->CreateBuffer(&iBuffdesc_skybox, &isubData_skybox, &ibuffer_Skybox);	//	IBuffer skybox
-	result = device->CreateBuffer(&vBuffDesc_star, &vsubData_star, &vbuffer_Star);	//	VBuffer star
-	result = device->CreateBuffer(&iBuffdesc_star, &isubData_star, &ibuffer_Star);	//	IBuffer star
+#pragma region CREATE ALL THE THINGS!
+	result = device->CreateBuffer(&constBufferDesc, &constSubData, &cbuffer);	//	cBuffer	grid
+	result = device->CreateBuffer(&vbuffDesc_grid, &vsubData_grid, &vbuffer_Grid);	//	vBuffer grid
+	result = device->CreateBuffer(&iBuffdesc_grid, &isubData_grid, &ibuffer_Grid);	//	iBuffer	grid
+	result = device->CreateBuffer(&vbuffDesc_skybox, &vsubData_skybox, &vbuffer_Skybox);	//	vBuffer skybox
+	result = device->CreateBuffer(&iBuffdesc_skybox, &isubData_skybox, &ibuffer_Skybox);	//	iBuffer skybox
+	result = device->CreateBuffer(&vBuffDesc_star, &vsubData_star, &vbuffer_Star);	//	vBuffer star
+	result = device->CreateBuffer(&iBuffdesc_star, &isubData_star, &ibuffer_Star);	//	iBuffer star
+	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &CubeVertexBuffer);	//	vBuffer cube
+	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &CubeIndexBuffer);	//	iBuffer cube
 
-	result = device->CreateVertexShader(VS_Grid, sizeof(VS_Grid), NULL, &vShader_Grid);	//	VShader grid
-	result = device->CreatePixelShader(PS_Grid, sizeof(PS_Grid), NULL, &pShader_Grid);		//	PShader grid
-	result = device->CreateVertexShader(VS_Cube, sizeof(VS_Cube), NULL, &vShader_Skybox);	//	VShader cube
-	result = device->CreatePixelShader(PS_Cube, sizeof(PS_Cube), NULL, &pShader_Skybox);		//	PShader cube
-	result = device->CreateVertexShader(VS_Star, sizeof(VS_Star), NULL, &vShader_Star);	//	VShader star
-	result = device->CreatePixelShader(PS_Star, sizeof(PS_Star), NULL, &pShader_Star);		//	PShader star
+	result = device->CreateVertexShader(VS_Grid, sizeof(VS_Grid), NULL, &vShader_Grid);	//	vShader grid
+	result = device->CreatePixelShader(PS_Grid, sizeof(PS_Grid), NULL, &pShader_Grid);		//	pShader grid
+	result = device->CreateVertexShader(VS_Cube, sizeof(VS_Cube), NULL, &vShader_Skybox);	//	vShader cube
+	result = device->CreatePixelShader(PS_Cube, sizeof(PS_Cube), NULL, &pShader_Skybox);		//	pShader cube
+	result = device->CreateVertexShader(VS_Star, sizeof(VS_Star), NULL, &vShader_Star);	//	vShader star
+	result = device->CreatePixelShader(PS_Star, sizeof(PS_Star), NULL, &pShader_Star);		//	pShader star
+	result = device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);	//	vShader cube
+	result = device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);	//	pShader cube
 
 	result = device->CreateInputLayout(vLayout_Grid, 2, VS_Grid, sizeof(VS_Grid), &iLayout_Grid);	//	Layout grid
 	result = device->CreateInputLayout(vLayout_skybox, 2, VS_Cube, sizeof(VS_Cube), &iLayout_Skybox);	//	Layout skybox
 	result = device->CreateInputLayout(vLayout_Star, 2, VS_Star, sizeof(VS_Star), &iLayout_Star);	//	Layout star
+	result = device->CreateInputLayout(layout, 2, VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertLayout);	//	Layout cube
 
 	result = device->CreateTexture2D(&depthBufferdesc, &stencilSubdata_skybox, &depthStencil);	//	Depth Stencil
 	result = device->CreateTexture2D(&depthBufferdesc, &stencilSubdata_star, &depthStencil);	//	Depth Stencil
 	result = device->CreateDepthStencilState(&dsDesc, &dsState);	//	Stencil state
 	result = device->CreateDepthStencilView(depthStencil, 0, &dsView);	//	Stencil view
 	result = device->CreateTexture2D(&textureDesc, textureSubdata, &skyboxTexture);	//	skybox_obj Texture
-	result = device->CreateSamplerState(&samplerDesc, &samplerState);	//	Sampler State
+	
+	result = device->CreateSamplerState(&samplerDesc, &samplerState);	//	Sampler State skybox
+	result = device->CreateSamplerState(&sampDesc, &CubeSamplerState);	//	Sampler State cube
 
 	result = device->CreateRasterizerState(&rasDesc_BC, &rState_B);	//	Rasterizer State
 	result = device->CreateRasterizerState(&rasDesc_BC_AA, &rState_B_AA);	//	Rasterizer State
@@ -802,6 +784,8 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	result = device->CreateRasterizerState(&rasDesc_Wire, &rState_Wire);	//	Rasterizer State
 
 	result = device->CreateBlendState(&blendDesc, &textureBlendState);	//	Blend State
+#pragma endregion
+
 }
 
 bool GraphicsProject::Update() {
@@ -839,13 +823,12 @@ bool GraphicsProject::Update() {
 	devContext->RSSetViewports(1, &viewport);
 
 
-	if (potsrv) {
-		potsrv->Release();
-		potsrv = nullptr;
+	if (srvSkybox) {
+		srvSkybox->Release();
+		srvSkybox = nullptr;
 	}
 
-
-	result = device->CreateShaderResourceView(skyboxTexture, NULL, &potsrv);	//	Shadr res view
+	result = device->CreateShaderResourceView(skyboxTexture, NULL, &srvSkybox);	//	Shadr res view
 
 #pragma endregion
 
@@ -866,6 +849,7 @@ bool GraphicsProject::Update() {
 #pragma region Draw Skybox
 	UINT strideValue = sizeof(OBJ_VERT);
 	UINT offset = 0;
+
 	devContext->RSSetState(rState_F);	//	needs front culling
 	devContext->IASetVertexBuffers(0, 1, &vbuffer_Skybox, &strideValue, &offset);
 	devContext->IASetIndexBuffer(ibuffer_Skybox, DXGI_FORMAT_R32_UINT, 0);
@@ -873,19 +857,16 @@ bool GraphicsProject::Update() {
 	devContext->PSSetShader(pShader_Skybox, NULL, 0);
 	devContext->IASetInputLayout(iLayout_Skybox);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->PSSetShaderResources(0, 1, &potsrv);
+	devContext->PSSetShaderResources(0, 1, &srvSkybox);
 	devContext->PSSetSamplers(0, 1, &samplerState);
 	devContext->DrawIndexed(1692, 0, 0);
-
-	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 #pragma endregion
 
 #pragma region Draw Star
 	cam_obj.star = RotateZ_Local(cam_obj.star, (float)(timeTracker.GetTime() * 0.0000025f));
 
 	strideValue = sizeof(SIMPLE_VERTEX);
-
-	devContext->RSSetState(rState_Wire); 	//	needs back culling
+	devContext->RSSetState(rState_Wire); 	//	needs back culling or wire
 	devContext->IASetVertexBuffers(0, 1, &vbuffer_Star, &strideValue, &offset);
 	devContext->IASetIndexBuffer(ibuffer_Star, DXGI_FORMAT_R32_UINT, 0);
 	devContext->VSSetShader(vShader_Star, NULL, 0);
@@ -901,29 +882,28 @@ bool GraphicsProject::Update() {
 	else
 		devContext->RSSetState(rState_F);	//	Front or Back culling
 
-	strideValue = sizeof(SIMPLE_VERTEX);	
+	strideValue = sizeof(SIMPLE_VERTEX);
 	devContext->IASetVertexBuffers(0, 1, &vbuffer_Grid, &strideValue, &offset);
 	devContext->IASetIndexBuffer(ibuffer_Grid, DXGI_FORMAT_R32_UINT, 0);
 	devContext->VSSetShader(vShader_Grid, NULL, 0);
 	devContext->PSSetShader(pShader_Grid, NULL, 0);
 	devContext->IASetInputLayout(iLayout_Grid);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);// triangle strip for land
-	devContext->DrawIndexed(80, 0, 0);	
+	devContext->DrawIndexed(80, 0, 0);
 #pragma endregion
 
 #pragma region Draw Cube
 	strideValue = sizeof(VERTEX);
-	devContext->RSSetState(rState_B);
+	devContext->RSSetState(rState_B);	//	needs back culling
 	devContext->IASetVertexBuffers(0, 1, &CubeVertexBuffer, &strideValue, &offset);
 	devContext->IASetIndexBuffer(CubeIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 	devContext->VSSetShader(VS, 0, 0);
 	devContext->PSSetShader(PS, 0, 0);
 	devContext->IASetInputLayout(vertLayout);
 	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->PSSetShaderResources(0, 1, &CubeTexture);
+	devContext->PSSetShaderResources(0, 1, &srvCube);
 	devContext->PSSetSamplers(0, 1, &CubeSamplerState);
 	devContext->DrawIndexed(36, 0, 0);
-
 #pragma endregion
 
 	swapChain->Present(0, 0);
@@ -1081,10 +1061,10 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	float negRotate = -(0.0025f * (float)time);
 	float posRotate = 0.0025f * (float)time;
 
-		//	cam Movement
+	//	cam Movement
 	if (keyboardState[DIK_W] & 0x80)
 		cam_obj.view = Translate(cam_obj.view, 0.0f, 0.0f, negMove);
-		
+
 	if (keyboardState[DIK_S] & 0x80)
 		cam_obj.view = Translate(cam_obj.view, 0.0f, 0.0f, posMove);
 
@@ -1093,15 +1073,15 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 
 	if (keyboardState[DIK_D] & 0x80)
 		cam_obj.view = Translate(cam_obj.view, negMove, 0.0f, 0.0f);
-		
-		//	cam Fly / Ground
+
+	//	cam Fly / Ground
 	if (keyboardState[DIK_F] & 0x80)
 		cam_obj.view = Translate(cam_obj.view, 0.0f, negMove, 0.0f);
 
 	if (keyboardState[DIK_G] & 0x80)
 		cam_obj.view = Translate(cam_obj.view, 0.0f, posMove, 0.0f);
 
-		//	cam Rotation
+	//	cam Rotation
 	if (keyboardState[DIK_UPARROW] & 0x80){
 		cam_obj.view = RotateX(cam_obj.view, negRotate);
 		cam_obj.skybox = RotateX(cam_obj.skybox, negRotate);
@@ -1111,12 +1091,12 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 		cam_obj.view = RotateX(cam_obj.view, posRotate);
 		cam_obj.skybox = RotateX(cam_obj.skybox, posRotate);
 	}
-		
+
 	if (keyboardState[DIK_LEFTARROW] & 0x80){
 		cam_obj.view = RotateY(cam_obj.view, negRotate);
 		cam_obj.skybox = RotateY(cam_obj.skybox, negRotate);
 	}
-		
+
 	if (keyboardState[DIK_RIGHTARROW] & 0x80){
 		cam_obj.view = RotateY(cam_obj.view, posRotate);
 		cam_obj.skybox = RotateY(cam_obj.skybox, posRotate);
@@ -1135,7 +1115,7 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	if (keyboardState[DIK_NUMPAD4] & 0x80)
 		cam_obj.star = Translate(cam_obj.star, negMove, 0.0f, 0.0f);
 
-		//	Reset Camera
+	//	Reset Camera
 	if (keyboardState[DIK_M] & 0x80){
 		cam_obj.world = Identity();
 		cam_obj.view = Identity();
@@ -1153,7 +1133,7 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 		cam_obj.skybox = Translate(cam_obj.skybox, 0.0f, -10.0f, 0.0f);
 
 		cam_obj.star = Scale_4x4(cam_obj.star, 0.2f, 0.2f, 0.2f); // star SHRINK
-		cam_obj.star = Translate(cam_obj.star, 0.5f, 0.5f, 0.5f);
+		cam_obj.star = Translate(cam_obj.star, 0.5f, 0.8f, 0.5f);
 	}
 #pragma endregion
 
@@ -1162,14 +1142,15 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 
 bool GraphicsProject::ShutDown() {
 
-	device->Release();
-	rtView->Release();
 	swapChain->Release();
+	device->Release();
 	devContext->Release();
+	rtView->Release();
 
 	iLayout_Grid->Release();
 	iLayout_Skybox->Release();
 	iLayout_Star->Release();
+	vertLayout->Release();
 
 	cbuffer->Release();
 	vbuffer_Grid->Release();
@@ -1178,37 +1159,21 @@ bool GraphicsProject::ShutDown() {
 	ibuffer_Skybox->Release();
 	vbuffer_Star->Release();
 	ibuffer_Star->Release();
-
-
-		//	TESTING	//
 	CubeIndexBuffer->Release();
 	CubeVertexBuffer->Release();
-	VS->Release();
-	PS->Release();
+
 	VS_Buffer->Release();
 	PS_Buffer->Release();
-	vertLayout->Release();
-	cbPerObjBuffer->Release();
-	CubeTexture->Release();
-	CubeSamplerState->Release();
-		//	//
 
-
+	VS->Release();
 	vShader_Grid->Release();
-	pShader_Grid->Release();
-	vShader_Skybox->Release();
-	pShader_Skybox->Release();
 	vShader_Star->Release();
+	vShader_Skybox->Release();
+
+	PS->Release();
+	pShader_Grid->Release();
 	pShader_Star->Release();
-
-	potsrv->Release();
-	skyboxTexture->Release();
-	textureBlendState->Release();
-
-	dsView->Release();
-	dsState->Release();
-	depthStencil->Release();
-	samplerState->Release();
+	pShader_Skybox->Release();
 
 	rState_B_AA->Release();
 	rState_B->Release();
@@ -1216,45 +1181,59 @@ bool GraphicsProject::ShutDown() {
 	rState_F->Release();
 	rState_Wire->Release();
 
+	srvSkybox->Release();
+	srvCube->Release();
+
+	skyboxTexture->Release();
+	depthStencil->Release();
+
+	dsView->Release();
+	dsState->Release();
+
+	samplerState->Release();
+	CubeSamplerState->Release();
+
+	textureBlendState->Release();
+
 	DIKeyboard->Release();
 	DIMouse->Release();
 	DirectInput->Release();
 
 	pApp = nullptr;
 
-	UnregisterClass( L"DirectXApplication", application ); 
+	UnregisterClass(L"DirectXApplication", application);
 	return true;
 }
 
 
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine,	int nCmdShow );						   
-LRESULT CALLBACK WndProc(HWND hWnd,	UINT message, WPARAM wparam, LPARAM lparam );		
-int WINAPI wWinMain( HINSTANCE hInstance, HINSTANCE, LPTSTR, int ) {
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow);
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wparam, LPARAM lparam);
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int) {
 	srand(unsigned int(time(0)));
-	GraphicsProject myApp(hInstance,(WNDPROC)WndProc);	
-    MSG msg; ZeroMemory( &msg, sizeof( msg ) );
-    while ( msg.message != WM_QUIT && myApp.Update() ) {	
-	    if ( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) ) { 
-            TranslateMessage( &msg );
-            DispatchMessage( &msg ); 
-        }
-    }
-	myApp.ShutDown(); 
-	return 0; 
+	GraphicsProject myApp(hInstance, (WNDPROC)WndProc);
+	MSG msg; ZeroMemory(&msg, sizeof(msg));
+	while (msg.message != WM_QUIT && myApp.Update()) {
+		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+	}
+	myApp.ShutDown();
+	return 0;
 }
 
-LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam ) {
-    if(GetAsyncKeyState(VK_ESCAPE))
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+	if (GetAsyncKeyState(VK_ESCAPE))
 		message = WM_DESTROY;
-    switch ( message ) {
-        case ( WM_DESTROY ): { PostQuitMessage( 0 ); }
-		case (WM_SIZE) : {
-			if (pApp)
-				pApp->ResizeWin();			
-			break;
-		}
-        break;
-    }
-    return DefWindowProc( hWnd, message, wParam, lParam );
+	switch (message) {
+	case (WM_DESTROY) : { PostQuitMessage(0); }
+	case (WM_SIZE) : {
+		if (pApp)
+			pApp->ResizeWin();
+		break;
+	}
+					 break;
+	}
+	return DefWindowProc(hWnd, message, wParam, lParam);
 }

@@ -6,10 +6,10 @@ cbuffer OBJECT : register(b1) {
 	float4x4 view;
 	float4x4 projection;
 
-	float4x4 cube;
+	float4x4 skybox;
 	float4x4 grid;
 	float4x4 star;
-	float4x4 ground;
+	float4x4 cube;
 };
 
 Texture2D ObjTexture;
@@ -27,7 +27,7 @@ VS_OUTPUT main(float3 inPos : POSITION, float2 inTexCoord : TEXCOORD)
 
 	float4 localH = float4(inPos, 1);
 
-	output.pos = mul(localH, ground);
+	output.pos = mul(localH, cube);
 	output.pos = mul(output.pos, view);
 	output.pos = mul(output.pos, projection);
 

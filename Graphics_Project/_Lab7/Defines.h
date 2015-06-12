@@ -109,7 +109,7 @@ struct OBJECT{
 	MATRIX4X4 skybox;
 	MATRIX4X4 grid;
 	MATRIX4X4 star;
-	MATRIX4X4 ground;
+	MATRIX4X4 cube;
 };
 
 #endif

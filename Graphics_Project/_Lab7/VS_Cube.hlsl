@@ -15,10 +15,10 @@ cbuffer OBJECT : register(b1) {
 	float4x4 view;
 	float4x4 projection;
 
-	float4x4 cube;
+	float4x4 skybox;
 	float4x4 grid;
 	float4x4 star;
-	float4x4 ground;
+	float4x4 cube;
 };
 
 
@@ -26,7 +26,7 @@ OUTPUT_CUBE_VERTEX main(INPUT_CUBE_VERTEX fromVertexBuffer) {
 	OUTPUT_CUBE_VERTEX sendToRasterizer = (OUTPUT_CUBE_VERTEX)0;
 	sendToRasterizer.projectedCoordinate = float4(fromVertexBuffer.coordinate, 1);	//	converts f3 to f4 and makes w = 1
 
-	sendToRasterizer.projectedCoordinate = mul(sendToRasterizer.projectedCoordinate, cube);
+	sendToRasterizer.projectedCoordinate = mul(sendToRasterizer.projectedCoordinate, skybox);
 	//sendToRasterizer.projectedCoordinate = mul(sendToRasterizer.projectedCoordinate, view);
 	sendToRasterizer.projectedCoordinate = mul(sendToRasterizer.projectedCoordinate, projection);
 
