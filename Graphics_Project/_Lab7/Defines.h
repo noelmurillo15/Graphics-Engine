@@ -1,6 +1,7 @@
 #ifndef _DEFINES_H_
 #define _DEFINES_H_
 
+#include <vector>
 #include <d3d11.h>
 #include <D3DX11.h>
 #include <D3DX10.h>
@@ -41,23 +42,28 @@ struct FLOAT4{
 	}
 };
 
-struct SIMPLE_VERTEX{
-	FLOAT4 pos;
-	FLOAT4 color;
-};
-
-
 struct VERTEX{
 
 	VERTEX(){}
 	VERTEX(float x, float y, float z,
-		float u, float v
-		/*float nx, float ny, float nz*/) 
-	: pos(x, y, z), texCoord(u, v)/*, normal(nx, ny, nz)*/{}
+		float u, float v,
+		float nx, float ny, float nz) 
+	: pos(x, y, z), texCoord(u, v), normal(nx, ny, nz){}
 
 	FLOAT3 pos;
 	FLOAT4 texCoord;
-	/*FLOAT3 normal*/;
+	FLOAT3 normal;
+};
+
+struct Vert{
+	FLOAT3 Pos;
+	FLOAT2 Uvs;
+	FLOAT3 Norms;
+};
+
+struct Model{
+	std::vector<Vert> interleaved;
+	std::vector<unsigned int> out_Indicies;
 };
 
 struct COLORGBA{
@@ -99,17 +105,6 @@ struct MATRIX4X4{
 
 struct cbPerObject{
 	MATRIX4X4 WVP;
-};
-
-struct OBJECT{
-	MATRIX4X4 world;
-	MATRIX4X4 view;
-	MATRIX4X4 proj;
-
-	MATRIX4X4 skybox;
-	MATRIX4X4 grid;
-	MATRIX4X4 star;
-	MATRIX4X4 cube;
 };
 
 #endif

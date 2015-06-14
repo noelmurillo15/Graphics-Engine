@@ -2,6 +2,7 @@
 #define _MATHFUNC_H_
 
 #include "Defines.h"
+#include <DirectXMath.h>
 
 
 unsigned int Convert2D_1D(unsigned int x, unsigned int y, unsigned int width);
@@ -12,7 +13,13 @@ FLOAT4 Mult_Vertex4x4(FLOAT4 ver, MATRIX4X4 mat4);
 
 FLOAT4 Negate_Vec3(FLOAT4 A);
 
+FLOAT4 Subtract_F4(FLOAT4 A, FLOAT4 B);
+
+MATRIX4X4 XMConverter(DirectX::XMMATRIX& A);
+
 MATRIX3X3 Transpose(MATRIX4X4 A);
+
+MATRIX4X4 Transpose_4x4(MATRIX4X4 A);
 
 MATRIX4X4 Identity();
 
@@ -35,6 +42,8 @@ MATRIX4X4 RotateZ_Local(MATRIX4X4 A, float radians);
 MATRIX4X4 Translate(MATRIX4X4 A, float x, float y, float z);
 
 MATRIX4X4 FastInverse(MATRIX4X4 Mat);
+
+MATRIX4X4 CreateViewMatrix(FLOAT4 EyePos, FLOAT4 FocusPos, FLOAT4 UpDir);
 
 MATRIX4X4 CreateProjectionMatrix(float zfar, float znear, unsigned int fov, float ar);
 

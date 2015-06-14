@@ -21,9 +21,6 @@
     <ClInclude Include="MathFunc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Cube.h">
-      <Filter>Resource Files</Filter>
-    </ClInclude>
     <ClInclude Include="CPUClass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -52,46 +49,8 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="PS_Cube.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="VS_Cube.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="PS_Grid.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="VS_Grid.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="PS_Star.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="VS_Star.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
     <FxCompile Include="Effects.fx">
       <Filter>Resource Files</Filter>
     </FxCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="PS_Cube.csh">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="PS_Grid.csh">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="VS_Cube.csh">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="VS_Grid.csh">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="PS_Star.csh">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="VS_Star.csh">
-      <Filter>Resource Files</Filter>
-    </None>
   </ItemGroup>
 </Project>

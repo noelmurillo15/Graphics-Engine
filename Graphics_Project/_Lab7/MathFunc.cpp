@@ -1,6 +1,6 @@
 #include "MathFunc.h"
 
-#include <DirectXMath.h>
+
 using namespace DirectX;
 
 
@@ -23,6 +23,15 @@ FLOAT4 Mult_Vertex4x4(FLOAT4 ver, MATRIX4X4 mat4){
 	answer.z = (ver.x * mat4.c) + (ver.y * mat4.g) + (ver.z * mat4.k) + (ver.w * mat4.o);
 	answer.w = (ver.x * mat4.d) + (ver.y * mat4.h) + (ver.z * mat4.l) + (ver.w * mat4.p);
 	return answer;
+}
+
+FLOAT4 Subtract_F4(FLOAT4 A, FLOAT4 B){
+	FLOAT4 out;
+	out.x = A.x - B.x;
+	out.y = A.y - B.y;
+	out.z = A.z - B.z;
+	out.w = A.w - B.w;
+	return out;
 }
 
 MATRIX4X4 Mult_4x4(MATRIX4X4 A, MATRIX4X4 B){
@@ -158,6 +167,16 @@ MATRIX3X3 Transpose(MATRIX4X4 A){
 	return trans;
 }
 
+MATRIX4X4 Transpose_4x4(MATRIX4X4 A){
+	MATRIX4X4 trans = {
+		A.a, A.e, A.i, A.m,
+		A.b, A.f, A.j, A.n,
+		A.c, A.g, A.k, A.o,
+		A.d, A.h, A.l, A.p
+	};
+	return trans;
+}
+
 FLOAT4 Negate_Vec3(FLOAT4 A){
 	FLOAT4 negate;
 	negate.x = -A.x;
@@ -180,6 +199,26 @@ MATRIX4X4 FastInverse(MATRIX4X4 Mat){
 	Mat.o = position.z;
 
 	return Mat;
+}
+
+MATRIX4X4 XMConverter(XMMATRIX& A){
+	MATRIX4X4 output = {
+		A.r[0].m128_f32[0], A.r[0].m128_f32[1], A.r[0].m128_f32[2], A.r[0].m128_f32[3],
+		A.r[1].m128_f32[0], A.r[1].m128_f32[1], A.r[1].m128_f32[2], A.r[1].m128_f32[3],
+		A.r[2].m128_f32[0], A.r[2].m128_f32[1], A.r[2].m128_f32[2], A.r[2].m128_f32[3],
+		A.r[3].m128_f32[0], A.r[3].m128_f32[1], A.r[3].m128_f32[2], A.r[3].m128_f32[3]
+	};
+	return output;
+}
+
+MATRIX4X4 CreateViewMatrix(FLOAT4 EyePos, FLOAT4 FocusPos, FLOAT4 UpDir){
+
+	 XMMATRIX tmp = XMMatrixLookAtLH(XMVectorSet(EyePos.x, EyePos.y, EyePos.z, EyePos.w),
+		 XMVectorSet(FocusPos.x, FocusPos.y, FocusPos.z, FocusPos.w),
+		 XMVectorSet(UpDir.x, UpDir.y, UpDir.z, UpDir.w));
+
+	 MATRIX4X4 result = XMConverter(tmp);
+	 return result;
 }
 
 MATRIX4X4 CreateProjectionMatrix(float zfar, float znear, unsigned int fov, float ar){

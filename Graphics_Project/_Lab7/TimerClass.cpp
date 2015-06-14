@@ -44,7 +44,7 @@ void TimerClass::Frame() {
 }
 
 float TimerClass::GetTime() {
-	return frameTime;
+	return frameTime / 1000.0f;
 }
 
 int TimerClass::GetElapsedTime() {
