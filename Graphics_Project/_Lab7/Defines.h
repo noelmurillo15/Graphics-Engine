@@ -103,8 +103,22 @@ struct MATRIX4X4{
 	}
 };
 
+struct Light{
+	Light(){ ZeroMemory(this, sizeof(Light)); }
+
+	FLOAT3 dir;
+	float pad;
+	FLOAT4 ambient;
+	FLOAT4 diffuse;
+};
+
 struct cbPerObject{
 	MATRIX4X4 WVP;
+	MATRIX4X4 World;
+};
+
+struct cbPerFrame{
+	Light light;
 };
 
 #endif

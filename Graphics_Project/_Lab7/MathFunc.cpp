@@ -8,6 +8,15 @@ unsigned int Convert2D_1D(unsigned int x, unsigned int y, unsigned int width){
 	return y * width + x;
 }
 
+FLOAT3 Mult_Vec3(FLOAT3 v, MATRIX3X3 m){
+	FLOAT3 ans = {
+		(m.a * v.x) + (m.b * v.y) + (m.c * v.z),
+		(m.i * v.x) + (m.j * v.y) + (m.k * v.z),
+		(m.x * v.x) + (m.y * v.y) + (m.z * v.z)
+	};
+	return ans;
+}
+
 FLOAT4 Mult_Vertex3x3(FLOAT4 ver, MATRIX3X3 mat){
 	FLOAT4 answer;
 	answer.x = (ver.x * mat.a) + (ver.y * mat.i) + (ver.z * mat.x);
@@ -32,6 +41,24 @@ FLOAT4 Subtract_F4(FLOAT4 A, FLOAT4 B){
 	out.z = A.z - B.z;
 	out.w = A.w - B.w;
 	return out;
+}
+
+MATRIX3X3 Mult_3x3(MATRIX3X3 A, MATRIX3X3 B){
+	MATRIX3X3 ans;
+
+	ans.a = (A.a * B.a) + (A.b * B.i) + (A.c * B.x);
+	ans.b = (A.a * B.b) + (A.b * B.j) + (A.c * B.y);
+	ans.c = (A.a * B.c) + (A.b * B.k) + (A.c * B.z);
+
+	ans.i = (A.i * B.a) + (A.j * B.i) + (A.k * B.x);
+	ans.j = (A.i * B.b) + (A.j * B.j) + (A.k * B.y);
+	ans.k = (A.i * B.c) + (A.j * B.k) + (A.k * B.z);
+
+	ans.x = (A.x * B.a) + (A.y * B.i) + (A.z * B.x);
+	ans.y = (A.x * B.b) + (A.y * B.j) + (A.z * B.y);
+	ans.z = (A.x * B.c) + (A.y * B.k) + (A.z * B.z);
+
+	return ans;
 }
 
 MATRIX4X4 Mult_4x4(MATRIX4X4 A, MATRIX4X4 B){
@@ -78,6 +105,36 @@ MATRIX4X4 Identity(){
 		0, 0, 0, 1
 	};
 	return A;
+}
+
+MATRIX3X3 RotateX(MATRIX3X3 A, float radians){
+	MATRIX3X3 rotate = {
+		1.0f, 0.0f, 0.0f,
+		0.0f, cos(radians), (-sin(radians)),
+		0.0f, sin(radians), cos(radians)
+	};
+
+	return Mult_3x3(A, rotate);
+}
+
+MATRIX3X3 RotateY(MATRIX3X3 A, float radians){
+	MATRIX3X3 rotate = {
+		cos(radians), 0, sin(radians),
+		0, 0, 0,
+		-sin(radians), 0, cos(radians)
+	};
+
+	return Mult_3x3(A, rotate);
+}
+
+MATRIX3X3 RotateZ(MATRIX3X3 A, float radians){
+	MATRIX3X3 rotate = {
+		cos(radians), 0, sin(radians),
+		0, 0, 0,
+		-sin(radians), 0, cos(radians)
+	};
+
+	return Mult_3x3(A, rotate);
 }
 
 MATRIX4X4 RotateX(MATRIX4X4 A, float radians){

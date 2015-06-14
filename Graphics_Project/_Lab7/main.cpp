@@ -38,14 +38,17 @@ class GraphicsProject {
 	ID3D11InputLayout*		vertLayout = nullptr;
 
 	ID3D11Buffer*			cbPerObjectBuffer = nullptr;
+	ID3D11Buffer*			cbPerFrameBuffer = nullptr;
 	ID3D11Buffer*			iBuffer_Cube = nullptr;
 	ID3D11Buffer*			vBuffer_Cube = nullptr;
 	
 	ID3D11VertexShader*		VS = nullptr;
 	ID3D11PixelShader*		PS = nullptr;
+	ID3D11PixelShader*		PS_D2D = nullptr;
 
 	ID3D10Blob*				VS_Buffer = nullptr;
 	ID3D10Blob*				PS_Buffer = nullptr;
+	ID3D10Blob*				PS_D2D_Buffer = nullptr;
 
 	ID3D11ShaderResourceView* CubeTexture = nullptr;
 	ID3D11SamplerState*		ssCube = nullptr;
@@ -80,6 +83,8 @@ class GraphicsProject {
 
 	ID3D11DepthStencilState*dsState = nullptr;
 
+	//	Star
+
 	//	Input Data
 	IDirectInputDevice8*	DIKeyboard;
 	IDirectInputDevice8*	DIMouse;
@@ -93,24 +98,28 @@ class GraphicsProject {
 	CpuClass				cpuTracker;
 
 	//	Objects
-	cbPerObject cbPerObj;
+	cbPerObject		cbPerObj;
+	cbPerFrame		constbuffPerFrame;
+	Light			light;
 
-	MATRIX4X4 WVP;
-	MATRIX4X4 cube1World;
-	MATRIX4X4 cube2World;
-	MATRIX4X4 modelWorld;
-	MATRIX4X4 skyboxWorld;
-	MATRIX4X4 camView;
-	MATRIX4X4 camProjection;
+	MATRIX4X4		WVP;
+	MATRIX4X4		cube1World;
+	MATRIX4X4		cube2World;
+	MATRIX4X4		modelWorld;
+	MATRIX4X4		skyboxWorld;
+	MATRIX4X4		camView;
+	MATRIX4X4		camProjection;
 
-	FLOAT4 camPosition;
-	FLOAT4 camTarget;
-	FLOAT4 camUp;
+	MATRIX3X3		rotation;
 
-	MATRIX4X4 Rotation;
-	MATRIX4X4 Scale;
-	MATRIX4X4 Translation;
-	float rot = 0.01f;
+	FLOAT4			camPosition;
+	FLOAT4			camTarget;
+	FLOAT4			camUp;
+
+	/*MATRIX4X4		Rotation;
+	MATRIX4X4		Scale;
+	MATRIX4X4		Translation;*/
+	float			rot = 0.01f;
 
 public:
 
@@ -277,9 +286,11 @@ bool GraphicsProject::InitScene(){
 #pragma region Compile .fx Shaders
 	result = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "main", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
 	result = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
+	result = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS_D2D", "ps_4_0", 0, 0, 0, &PS_D2D_Buffer, 0, 0);
 
 	result = device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);	//	vShader cube
 	result = device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);	//	pShader cube
+	result = device->CreatePixelShader(PS_D2D_Buffer->GetBufferPointer(), PS_D2D_Buffer->GetBufferSize(), NULL, &PS_D2D);
 
 	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);	//	vShader cube
 	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);		//	pShader cube
@@ -371,6 +382,11 @@ bool GraphicsProject::InitScene(){
 
 	unsigned int aspect = (float)BUFFER_WIDTH / BUFFER_HEIGHT;
 	camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, aspect);
+
+		//	light
+	light.dir = FLOAT3(-0.25f, 0.5f, 1.0f);
+	light.ambient = FLOAT4(0.4f, 0.0f, 0.4f, 1.0f);
+	light.diffuse = FLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 #pragma endregion
 
 #pragma region IndexBuffer
@@ -449,6 +465,7 @@ bool GraphicsProject::InitScene(){
 #pragma endregion
 
 #pragma region ConstBuffer
+		//	per object
 	D3D11_BUFFER_DESC cbbd;
 	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
 	cbbd.Usage = D3D11_USAGE_DEFAULT;
@@ -456,6 +473,14 @@ bool GraphicsProject::InitScene(){
 	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
 	result = device->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
+
+		//	 per frame
+	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
+	cbbd.Usage = D3D11_USAGE_DEFAULT;
+	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cbbd.ByteWidth = sizeof(cbPerFrame);
+
+	result = device->CreateBuffer(&cbbd, NULL, &cbPerFrameBuffer);
 #pragma endregion
 
 #pragma region Load Textures
@@ -554,39 +579,35 @@ bool GraphicsProject::Update() {
 	pApp->ChangeTitleBar(lpwinname);
 #pragma endregion
 
-	rot += timeTracker.GetTime() * 0.0025f;
+	rot += timeTracker.GetTime() * 3.0025f;
 	if (rot > 6.26f)
 		rot = 0.0f;
 
-	//	Update Skybox
+		//	Update Skybox Texture
 	if (srvSkybox) {
 		srvSkybox->Release();
 		srvSkybox = nullptr;
 	}
 	HRESULT result = device->CreateShaderResourceView(skyboxTexture, NULL, &srvSkybox);	//	Shadr res view
 
-	//	Reset cube1World
+		//	Reset 
+	WVP = Identity();
+	cbPerObj.World = WVP;
 	cube1World = Identity();
-
-	//	Define cube1's world space matrix
-	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
-	cube1World = RotateZ_Local(cube1World, rot);
-
-	//	Reset cube2World
 	cube2World = Identity();
-
-	//	Define cube2's world space matrix
-	cube2World = Scale_4x4(cube2World, 0.5f, 0.5f, 0.5f);
-	cube2World = RotateZ_Local(cube2World, -rot);
-	cube2World = RotateX_Local(cube2World, -rot);
-
-	//	Reset cube2World
 	modelWorld = Identity();
 
-	//	Define cube2's world space matrix
+		//	Define
 	modelWorld = Scale_4x4(modelWorld, 0.2f, 0.2f, 0.2f);
 	modelWorld = Translate(modelWorld, 0.0f, 0.0f, 6.0f);
 	modelWorld = RotateZ_Local(modelWorld, 6.28f * 2.0f);
+
+	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
+	cube1World = RotateZ(cube1World, rot);
+
+	cube2World = Scale_4x4(cube2World, 0.5f, 0.5f, 0.5f);
+	cube2World = RotateX(cube2World, -rot);
+	cube2World = RotateZ(cube2World, -rot);
 
 	Render();
 
@@ -597,6 +618,7 @@ void GraphicsProject::Render(){
 
 	//	Background Color
 	FLOAT RGBA[4]; RGBA[0] = 0; RGBA[1] = 0; RGBA[2] = 0; RGBA[3] = 1;
+	UINT stride, offset;
 
 	//	Clear views
 	devContext->ClearRenderTargetView(rtView, RGBA);
@@ -606,10 +628,14 @@ void GraphicsProject::Render(){
 	devContext->OMSetRenderTargets(1, &rtView, dsView);
 	devContext->RSSetViewports(1, &viewport);
 
+	//	Update Lights
+	constbuffPerFrame.light = light;
+	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
+	devContext->PSSetConstantBuffers(0, 1, &cbPerFrameBuffer);
 
 	//	Infinite Skybox
-	UINT stride = sizeof(OBJ_VERT);
-	UINT offset = 0;
+	stride = sizeof(OBJ_VERT);
+	offset = 0;
 
 	WVP = Mult_4x4(skyboxWorld, camProjection);	//	dont mult with camView for infinite skybox
 	cbPerObj.WVP = WVP;
@@ -632,11 +658,13 @@ void GraphicsProject::Render(){
 	//	Link Model
 	WVP = Mult_4x4(modelWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (Transpose_4x4(modelWorld));
 	cbPerObj.WVP = WVP;
 
 	stride = sizeof(Vert);
 	offset = 0;
 
+	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 	devContext->RSSetState(rState_B);
@@ -652,13 +680,14 @@ void GraphicsProject::Render(){
 	UINT numIndicies = ibufferDesc.ByteWidth / sizeof(UINT);
 	devContext->DrawIndexed(numIndicies, 0, 0);
 
-
 		//	1st Cube
 	WVP = Mult_4x4(cube1World, camView);
 	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (Transpose_4x4(cube1World));
 	cbPerObj.WVP = WVP;
 
 	stride = sizeof(VERTEX);	
+	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);	
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
@@ -674,8 +703,10 @@ void GraphicsProject::Render(){
 		//	2nd Cube
 	WVP = Mult_4x4(cube2World, camView);
 	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (Transpose_4x4(cube2World));
 	cbPerObj.WVP = WVP;
 
+	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 	devContext->RSSetState(rState_Wire);
@@ -863,12 +894,12 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	//	cam Rotation
 	if (keyboardState[DIK_UPARROW] & 0x80){
 		camView = RotateX(camView, negRotate);
-		skyboxWorld = RotateY(skyboxWorld, negRotate);
+		skyboxWorld = RotateX(skyboxWorld, negRotate);
 	}
 
 	if (keyboardState[DIK_DOWNARROW] & 0x80){
 		camView = RotateX(camView, posRotate);
-		skyboxWorld = RotateY(skyboxWorld, posRotate);
+		skyboxWorld = RotateX(skyboxWorld, posRotate);
 	}
 
 	if (keyboardState[DIK_LEFTARROW] & 0x80){
@@ -1013,6 +1044,8 @@ bool GraphicsProject::ShutDown() {
 	vertLayout->Release();
 
 	cbPerObjectBuffer->Release();
+	cbPerFrameBuffer->Release();
+
 	iBuffer_Cube->Release();
 	vBuffer_Cube->Release();
 
@@ -1021,9 +1054,11 @@ bool GraphicsProject::ShutDown() {
 
 	VS->Release();
 	PS->Release();
+	PS_D2D->Release();
 
 	VS_Buffer->Release();
 	PS_Buffer->Release();
+	PS_D2D_Buffer->Release();
 
 	CubeTexture->Release();
 	ssCube->Release();
