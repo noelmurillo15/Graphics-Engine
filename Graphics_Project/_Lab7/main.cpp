@@ -3,8 +3,14 @@
 #include "FPSClass.h"
 #include "CPUClass.h"
 
+#include "Cube.h"
+#include "stars.h"
+
 #include <ctime>
 #include <string>
+
+#include "PS_Skybox.csh"
+#include "VS_Skybox.csh"
 
 #include <dinput.h>
 #pragma comment (lib, "dinput8.lib")
@@ -58,6 +64,22 @@ class GraphicsProject {
 	ID3D11Buffer*			iBuffer_Model = nullptr;
 	ID3D11Buffer*			vBuffer_Model = nullptr;
 
+	//	Skybox
+	ID3D11InputLayout*		skyboxLayout = nullptr;
+
+	ID3D11Buffer*			vBuffer_Skybox = nullptr;
+	ID3D11Buffer*			iBuffer_Skybox = nullptr;
+
+	ID3D11VertexShader*		vShader_Skybox = nullptr;
+	ID3D11PixelShader*		pShader_Skybox = nullptr;
+
+	ID3D11SamplerState*		ssSkybox = nullptr;
+
+	ID3D11Texture2D*		skyboxTexture = nullptr;
+	ID3D11ShaderResourceView* srvSkybox = nullptr;
+
+	ID3D11DepthStencilState*dsState = nullptr;
+
 	//	Input Data
 	IDirectInputDevice8*	DIKeyboard;
 	IDirectInputDevice8*	DIMouse;
@@ -77,6 +99,7 @@ class GraphicsProject {
 	MATRIX4X4 cube1World;
 	MATRIX4X4 cube2World;
 	MATRIX4X4 modelWorld;
+	MATRIX4X4 skyboxWorld;
 	MATRIX4X4 camView;
 	MATRIX4X4 camProjection;
 
@@ -204,21 +227,45 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 #pragma endregion
 
 #pragma region DepthStencil
-	D3D11_TEXTURE2D_DESC dsDesc;
-	ZeroMemory(&dsDesc, sizeof(D3D11_TEXTURE2D_DESC));
-	dsDesc.Width = BUFFER_WIDTH;
-	dsDesc.Height = BUFFER_HEIGHT;
-	dsDesc.MipLevels = 1;
-	dsDesc.ArraySize = 1;
-	dsDesc.Usage = D3D11_USAGE_DEFAULT;
-	dsDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-	dsDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	dsDesc.SampleDesc.Count = 1;
+		//	Cube
+	D3D11_TEXTURE2D_DESC depthDesc;
+	ZeroMemory(&depthDesc, sizeof(D3D11_TEXTURE2D_DESC));
+	depthDesc.Width = BUFFER_WIDTH;
+	depthDesc.Height = BUFFER_HEIGHT;
+	depthDesc.Usage = D3D11_USAGE_DEFAULT;
+	depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	depthDesc.Format = DXGI_FORMAT_D32_FLOAT;
+	depthDesc.MipLevels = 1;
+	depthDesc.ArraySize = 1;
+	depthDesc.SampleDesc.Count = 1;
 
-	result = device->CreateTexture2D(&dsDesc, NULL, &dsBuffer);
-	result = device->CreateDepthStencilView(dsBuffer, NULL, &dsView);
+		//	Skybox
+	D3D11_SUBRESOURCE_DATA stencilSubdata_skybox;
+	stencilSubdata_skybox.pSysMem = Cube_indicies;
+	stencilSubdata_skybox.SysMemPitch = sizeof(const unsigned int);
+	stencilSubdata_skybox.SysMemSlicePitch = sizeof(Cube_indicies);
 
-	devContext->OMSetRenderTargets(1, &rtView, dsView);
+	result = device->CreateTexture2D(&depthDesc, &stencilSubdata_skybox, &dsBuffer);
+	result = device->CreateDepthStencilView(dsBuffer, 0, &dsView);
+
+		//	DS State
+	D3D11_DEPTH_STENCIL_DESC dsDesc;
+	dsDesc.DepthEnable = true;
+	dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	dsDesc.DepthFunc = D3D11_COMPARISON_LESS;
+	dsDesc.StencilEnable = true;
+	dsDesc.StencilReadMask = 0xFF;
+	dsDesc.StencilWriteMask = 0xFF;
+	dsDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR;
+	dsDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+	dsDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR;
+	dsDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+
+	result = device->CreateDepthStencilState(&dsDesc, &dsState);
 #pragma endregion
 
 }
@@ -233,6 +280,9 @@ bool GraphicsProject::InitScene(){
 
 	result = device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);	//	vShader cube
 	result = device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);	//	pShader cube
+
+	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);	//	vShader cube
+	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);		//	pShader cube
 #pragma endregion
 
 #pragma region Load Model
@@ -306,7 +356,25 @@ bool GraphicsProject::InitScene(){
 	};
 #pragma endregion
 
+#pragma region Skybox Setup
+	skyboxWorld = Identity();
+	skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f); // skybox EXPAND
+	skyboxWorld = Translate(skyboxWorld, 0.0f, -10.0f, 0.0f);
+#pragma endregion
+
+#pragma region Cam Setup
+	camPosition = FLOAT4(0.0f, 3.0f, -8.0f, 0.0f);
+	camTarget = FLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+	camUp = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
+
+	camView = CreateViewMatrix(camPosition, camTarget, camUp);
+
+	unsigned int aspect = (float)BUFFER_WIDTH / BUFFER_HEIGHT;
+	camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, aspect);
+#pragma endregion
+
 #pragma region IndexBuffer
+		//	Cube
 	D3D11_BUFFER_DESC indexBufferDesc;
 	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -315,12 +383,23 @@ bool GraphicsProject::InitScene(){
 
 	D3D11_SUBRESOURCE_DATA iinitData;
 	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
-	iinitData.pSysMem = iCube;
+	iinitData.pSysMem = &iCube;
 
 	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Cube);
+
+		//	Skybox
+	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	indexBufferDesc.ByteWidth = sizeof(const unsigned int) * 1692;
+	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
+	iinitData.pSysMem = &Cube_indicies;
+
+	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Skybox);
 #pragma endregion
 
 #pragma region VertexBuffer
+		//	Cubes
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -329,12 +408,23 @@ bool GraphicsProject::InitScene(){
 
 	D3D11_SUBRESOURCE_DATA vertBufferData;
 	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
-	vertBufferData.pSysMem = Cube;
+	vertBufferData.pSysMem = &Cube;
 
 	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Cube);
+
+		//	Skybox
+	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.ByteWidth = sizeof(OBJ_VERT) * 776;
+	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
+	vertBufferData.pSysMem = &Cube_data;
+
+	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Skybox);
 #pragma endregion
 
 #pragma region InputLayer
+		//	VS
 	D3D11_INPUT_ELEMENT_DESC layout[3];
 	layout[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 	layout[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
@@ -342,6 +432,13 @@ bool GraphicsProject::InitScene(){
 
 	UINT arrSize = ARRAYSIZE(layout);
 	result = device->CreateInputLayout(layout, arrSize, VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertLayout);
+
+		//	VS_Skybox
+	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[2];
+	arrSize = ARRAYSIZE(vLayout_skybox);
+	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	result = device->CreateInputLayout(vLayout_skybox, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);	//	Layout skybox
 #pragma endregion
 
 #pragma region Viewport
@@ -361,19 +458,31 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
 #pragma endregion
 
-#pragma region Cam Info
-	camPosition = FLOAT4(0.0f, 3.0f, -8.0f, 0.0f);
-	camTarget = FLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
-	camUp = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
-
-	camView = CreateViewMatrix(camPosition, camTarget, camUp);
-
-	unsigned int aspect = (float)BUFFER_WIDTH / BUFFER_HEIGHT;
-	camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, aspect);
-#pragma endregion
-
 #pragma region Load Textures
+		//	Cube
 	result = D3DX11CreateShaderResourceViewFromFile(device, L"grass.jpg", NULL, NULL, &CubeTexture, NULL);
+
+	//	skybox
+	D3D11_TEXTURE2D_DESC textureDesc;
+	ZeroMemory(&textureDesc, sizeof(D3D11_TEXTURE2D_DESC));
+	textureDesc.Usage = D3D11_USAGE_DEFAULT;
+	textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	textureDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	textureDesc.Width = stars_width;
+	textureDesc.Height = stars_height;
+	textureDesc.MipLevels = stars_numlevels;
+	textureDesc.ArraySize = 1;
+	textureDesc.SampleDesc.Count = 1;
+
+	D3D11_SUBRESOURCE_DATA textureSubdata[stars_numlevels];
+	ZeroMemory(&textureSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
+
+	for (int i = 0; i < stars_numlevels; i++){
+		textureSubdata[i].pSysMem = &stars_pixels[stars_leveloffsets[i]];
+		textureSubdata[i].SysMemPitch = sizeof(unsigned int) * (stars_width >> i);
+	}
+
+	result = device->CreateTexture2D(&textureDesc, textureSubdata, &skyboxTexture);
 #pragma endregion
 
 #pragma region SamplerState
@@ -387,6 +496,18 @@ bool GraphicsProject::InitScene(){
 	sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
 	result = device->CreateSamplerState(&sampDesc, &ssCube);
+
+	ZeroMemory(&sampDesc, sizeof(D3D11_SAMPLER_DESC));
+	sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.MinLOD = (-FLT_MAX);
+	sampDesc.MaxLOD = (FLT_MAX);
+	sampDesc.MaxAnisotropy = 1;
+	sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+
+	result = device->CreateSamplerState(&sampDesc, &ssSkybox);
 #pragma endregion
 
 #pragma region RasterDesc
@@ -437,25 +558,32 @@ bool GraphicsProject::Update() {
 	if (rot > 6.26f)
 		rot = 0.0f;
 
-	//Reset cube1World
+	//	Update Skybox
+	if (srvSkybox) {
+		srvSkybox->Release();
+		srvSkybox = nullptr;
+	}
+	HRESULT result = device->CreateShaderResourceView(skyboxTexture, NULL, &srvSkybox);	//	Shadr res view
+
+	//	Reset cube1World
 	cube1World = Identity();
 
-	//Define cube1's world space matrix
+	//	Define cube1's world space matrix
 	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
 	cube1World = RotateZ_Local(cube1World, rot);
 
-	//Reset cube2World
+	//	Reset cube2World
 	cube2World = Identity();
 
-	//Define cube2's world space matrix
+	//	Define cube2's world space matrix
 	cube2World = Scale_4x4(cube2World, 0.5f, 0.5f, 0.5f);
 	cube2World = RotateZ_Local(cube2World, -rot);
 	cube2World = RotateX_Local(cube2World, -rot);
 
-	//Reset cube2World
+	//	Reset cube2World
 	modelWorld = Identity();
 
-	//Define cube2's world space matrix
+	//	Define cube2's world space matrix
 	modelWorld = Scale_4x4(modelWorld, 0.2f, 0.2f, 0.2f);
 	modelWorld = Translate(modelWorld, 0.0f, 0.0f, 6.0f);
 	modelWorld = RotateZ_Local(modelWorld, 6.28f * 2.0f);
@@ -472,19 +600,42 @@ void GraphicsProject::Render(){
 
 	//	Clear views
 	devContext->ClearRenderTargetView(rtView, RGBA);
-	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1, 0);
 
+	devContext->OMSetDepthStencilState(dsState, 1);
 	devContext->OMSetRenderTargets(1, &rtView, dsView);
 	devContext->RSSetViewports(1, &viewport);
 
+
+	//	Infinite Skybox
+	UINT stride = sizeof(OBJ_VERT);
+	UINT offset = 0;
+
+	WVP = Mult_4x4(skyboxWorld, camProjection);	//	dont mult with camView for infinite skybox
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+	devContext->RSSetState(rState_F);	//	needs front culling
+	devContext->IASetVertexBuffers(0, 1, &vBuffer_Skybox, &stride, &offset);
+	devContext->IASetIndexBuffer(iBuffer_Skybox, DXGI_FORMAT_R32_UINT, 0);
+	devContext->VSSetShader(vShader_Skybox, NULL, 0);
+	devContext->PSSetShader(pShader_Skybox, NULL, 0);
+	devContext->IASetInputLayout(skyboxLayout);
+	devContext->PSSetShaderResources(0, 1, &srvSkybox);
+	devContext->PSSetSamplers(0, 1, &ssSkybox);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	devContext->DrawIndexed(1692, 0, 0);
+
+	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1, 0);
 
 	//	Link Model
 	WVP = Mult_4x4(modelWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.WVP = WVP;
 
-	UINT stride = sizeof(Vert);
-	UINT offset = 0;
+	stride = sizeof(Vert);
+	offset = 0;
 
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
@@ -552,7 +703,7 @@ void GraphicsProject::ChangeTitleBar(std::string _str){
 void GraphicsProject::ResizeWin() {
 
 	// Safety check
-	if (this->swapChain == nullptr || this->devContext == nullptr || this->device == nullptr)
+	if (pApp->swapChain == NULL || pApp->devContext == NULL || pApp->device == NULL)
 		return;
 
 	//	Find out new width & height
@@ -574,8 +725,10 @@ void GraphicsProject::ResizeWin() {
 	rtView->Release();
 	rtView = nullptr;
 	dsBuffer->Release();
+	dsBuffer = nullptr;
 	dsView->Release();
 	dsView = nullptr;
+	dsState->Release();
 
 	//	resize
 	hr = swapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
@@ -585,28 +738,47 @@ void GraphicsProject::ResizeWin() {
 	swapChain->GetBuffer(0, __uuidof(pBB),
 		reinterpret_cast<void**>(&pBB));
 
-	DXGI_SWAP_CHAIN_DESC scDesc;
-	swapChain->GetDesc(&scDesc);
-
-	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
-	ZeroMemory(&rtvDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
-
 	hr = device->CreateRenderTargetView(pBB, NULL, &rtView);
 	pBB->Release();
 
-	D3D11_TEXTURE2D_DESC dsDesc;
-	ZeroMemory(&dsDesc, sizeof(D3D11_TEXTURE2D_DESC));
-	dsDesc.Width = BUFFER_WIDTH;
-	dsDesc.Height = BUFFER_HEIGHT;
-	dsDesc.MipLevels = 1;
-	dsDesc.ArraySize = 1;
-	dsDesc.Usage = D3D11_USAGE_DEFAULT;
-	dsDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-	dsDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	dsDesc.SampleDesc.Count = 1;
+	//	Create new depth stencil
+	D3D11_TEXTURE2D_DESC depthBufferdesc;
+	depthBufferdesc.Usage = D3D11_USAGE_DEFAULT;
+	depthBufferdesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	depthBufferdesc.Format = DXGI_FORMAT_D32_FLOAT;
+	depthBufferdesc.Width = BUFFER_WIDTH;
+	depthBufferdesc.Height = BUFFER_HEIGHT;
+	depthBufferdesc.MipLevels = 1;
+	depthBufferdesc.ArraySize = 1;
+	depthBufferdesc.SampleDesc.Count = 1;
+	depthBufferdesc.SampleDesc.Quality = 0;
+	depthBufferdesc.CPUAccessFlags = 0;
+	depthBufferdesc.MiscFlags = 0;
 
-	hr = device->CreateTexture2D(&dsDesc, NULL, &dsBuffer);
-	hr = device->CreateDepthStencilView(dsBuffer, NULL, &dsView);
+	D3D11_SUBRESOURCE_DATA stenilSubres;
+	stenilSubres.pSysMem = Cube_indicies;
+	stenilSubres.SysMemPitch = sizeof(const unsigned int);
+	stenilSubres.SysMemSlicePitch = sizeof(Cube_indicies);
+
+	D3D11_DEPTH_STENCIL_DESC dsDesc;
+	dsDesc.DepthEnable = true;
+	dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	dsDesc.DepthFunc = D3D11_COMPARISON_LESS;
+	dsDesc.StencilEnable = true;
+	dsDesc.StencilReadMask = 0xFF;
+	dsDesc.StencilWriteMask = 0xFF;
+	dsDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR;
+	dsDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+	dsDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR;
+	dsDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+
+	hr = device->CreateTexture2D(&depthBufferdesc, &stenilSubres, &dsBuffer);	//	Depth Stencil
+	hr = device->CreateDepthStencilState(&dsDesc, &dsState);	//	Stencil state
+	hr = device->CreateDepthStencilView(dsBuffer, 0, &dsView);	//	Stencil view
 
 	devContext->OMSetRenderTargets(1, &rtView, dsView);
 
@@ -654,18 +826,75 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 
 	DIKeyboard->GetDeviceState(sizeof(keyboardState), (LPVOID)&keyboardState);
 
-	if (keyboardState[DIK_ESCAPE] & 0x80)
+	if (keyboardState[DIK_ESCAPE] & 0x80){
+		int x = 0;
 		PostMessage(pApp->window, WM_DESTROY, 0, 0);
+	}
 
 #pragma region Camera&Object Movement
 	//	Movement amount per frame
-	float negMove = -(0.0025f * (float)time);
-	float posMove = 0.0025f * (float)time;
+	float negMove = -(5.0f * (float)time);
+	float posMove = 5.0f * (float)time;
 
-	float negRotate = -(0.0025f * (float)time);
-	float posRotate = 0.0025f * (float)time;
+	float negRotate = -(5.0f * (float)time);
+	float posRotate = 5.0f * (float)time;
 
 		//	DIK_ & 0x80	
+	//	cam Movement
+	if (keyboardState[DIK_W] & 0x80)
+		camView = Translate(camView, 0.0f, 0.0f, negMove);
+
+	if (keyboardState[DIK_S] & 0x80)
+		camView = Translate(camView, 0.0f, 0.0f, posMove);
+
+	if (keyboardState[DIK_A] & 0x80)
+		camView = Translate(camView, posMove, 0.0f, 0.0f);
+
+	if (keyboardState[DIK_D] & 0x80)
+		camView = Translate(camView, negMove, 0.0f, 0.0f);
+
+	//	cam Fly / Ground
+	if (keyboardState[DIK_F] & 0x80)
+		camView = Translate(camView, 0.0f, negMove, 0.0f);
+
+	if (keyboardState[DIK_G] & 0x80)
+		camView = Translate(camView, 0.0f, posMove, 0.0f);
+
+	//	cam Rotation
+	if (keyboardState[DIK_UPARROW] & 0x80){
+		camView = RotateX(camView, negRotate);
+		skyboxWorld = RotateY(skyboxWorld, negRotate);
+	}
+
+	if (keyboardState[DIK_DOWNARROW] & 0x80){
+		camView = RotateX(camView, posRotate);
+		skyboxWorld = RotateY(skyboxWorld, posRotate);
+	}
+
+	if (keyboardState[DIK_LEFTARROW] & 0x80){
+		camView = RotateY(camView, negRotate);
+		skyboxWorld = RotateY(skyboxWorld, negRotate);
+	}
+
+	if (keyboardState[DIK_RIGHTARROW] & 0x80){
+		camView = RotateY(camView, posRotate);
+		skyboxWorld = RotateY(skyboxWorld, posRotate);
+	}
+
+	if (keyboardState[DIK_M] & 0x80){
+		skyboxWorld = Identity();
+		skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f); // skybox EXPAND
+		skyboxWorld = Translate(skyboxWorld, 0.0f, -10.0f, 0.0f);
+
+		camPosition = FLOAT4(0.0f, 3.0f, -8.0f, 0.0f);
+		camTarget = FLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+		camUp = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
+
+		camView = CreateViewMatrix(camPosition, camTarget, camUp);
+
+		float ar = abs(w / h);
+		camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, ar);
+	}
 #pragma endregion
 
 	return;
@@ -801,6 +1030,20 @@ bool GraphicsProject::ShutDown() {
 
 	dsBuffer->Release();
 	dsView->Release();
+	dsState->Release();
+
+	skyboxLayout->Release();
+
+	vBuffer_Skybox->Release();
+	iBuffer_Skybox->Release();
+
+	vShader_Skybox->Release();
+	pShader_Skybox->Release();
+
+	ssSkybox->Release();
+
+	srvSkybox->Release();
+	skyboxTexture->Release();
 
 	rState_B_AA->Release();
 	rState_B->Release();
