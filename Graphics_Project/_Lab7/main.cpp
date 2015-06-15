@@ -113,6 +113,9 @@ class GraphicsProject {
 	MATRIX4X4		WVP;
 	MATRIX4X4		cube1World;
 	MATRIX4X4		cube2World;
+	MATRIX4X4		cube3World;
+	MATRIX4X4		cube4World;
+
 	MATRIX4X4		modelWorld;
 	MATRIX4X4		skyboxWorld;
 	MATRIX4X4		groundWorld;
@@ -654,12 +657,14 @@ bool GraphicsProject::Update() {
 	cbPerObj.World = WVP;
 	cube1World = Identity();
 	cube2World = Identity();
+	cube3World = Identity();
+	cube4World = Identity();
 	modelWorld = Identity();
 	groundWorld = Identity();
 
 		//	Define
 	modelWorld = RotateZ(modelWorld, rot);
-	modelWorld = Translate(modelWorld, 0.0f, -0.8f, 6.0f);
+	modelWorld = Translate(modelWorld, 0.0f, -0.8f, 15.0f);
 	modelWorld = Scale_4x4(modelWorld, 0.4f, 0.4f, 0.4f);
 
 	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
@@ -667,6 +672,12 @@ bool GraphicsProject::Update() {
 
 	cube2World = RotateX(cube2World, rot);
 	cube2World = Scale_4x4(cube2World, 2.0f, 2.0f, 2.0f);
+
+	cube3World = RotateX(cube3World, -rot);
+	cube3World = Translate(cube1World, 0.0f, 0.0f, 5.0f);
+
+	cube4World = RotateX(cube4World, rot);
+	cube4World = Translate(cube4World, 0.0f, 0.0f, 10.0f);
 
 	groundWorld = Translate(groundWorld, 0.0f, 0.0f, 0.0f);
 	groundWorld = Scale_4x4(groundWorld, 20.0f, 1.0f, 20.0f);
@@ -695,7 +706,7 @@ void GraphicsProject::Render(){
 	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->PSSetConstantBuffers(0, 1, &cbPerFrameBuffer);
 
-	//	Infinite Skybox
+#pragma region Draw Skybox
 	stride = sizeof(OBJ_VERT);
 	offset = 0;
 
@@ -716,8 +727,9 @@ void GraphicsProject::Render(){
 	devContext->DrawIndexed(1692, 0, 0);
 
 	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1, 0);
+#pragma endregion
 
-	//	Ground
+#pragma region Draw Ground
 	WVP = Mult_4x4(groundWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (groundWorld);
@@ -736,8 +748,9 @@ void GraphicsProject::Render(){
 	devContext->PSSetShaderResources(0, 1, &GroundTexture);
 	devContext->PSSetSamplers(0, 1, &ssCube);
 	devContext->DrawIndexed(6, 0, 0);
+#pragma endregion
 
-	//	Link Model
+#pragma region Draw Model
 	WVP = Mult_4x4(modelWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (modelWorld);
@@ -761,8 +774,9 @@ void GraphicsProject::Render(){
 	iBuffer_Model->GetDesc(&ibufferDesc);
 	UINT numIndicies = ibufferDesc.ByteWidth / sizeof(UINT);
 	devContext->DrawIndexed(numIndicies, 0, 0);
+#pragma endregion
 
-		//	1st Cube
+#pragma region Draw Cube
 	WVP = Mult_4x4(cube1World, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (cube1World);
@@ -781,11 +795,37 @@ void GraphicsProject::Render(){
 	devContext->PSSetShaderResources(0, 1, &CubeTexture);
 	devContext->PSSetSamplers(0, 1, &ssCube);
 	devContext->DrawIndexed(36, 0, 0);
+#pragma endregion
 
-		//	2nd Cube
+#pragma region Draw Cube2
 	WVP = Mult_4x4(cube2World, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (cube2World);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+	devContext->RSSetState(rState_F_AA);
+	devContext->OMSetBlendState(textureBlendState, NULL, 0xffffffff);
+	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
+	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
+	devContext->VSSetShader(VS, NULL, 0);
+	devContext->PSSetShader(PS, NULL, 0);
+	devContext->IASetInputLayout(vertLayout);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	devContext->PSSetShaderResources(0, 1, &TransparentCubeTexture);
+	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->DrawIndexed(36, 0, 0);
+
+	devContext->RSSetState(rState_B);
+	devContext->DrawIndexed(36, 0, 0);
+#pragma endregion
+
+#pragma region Draw Cube3
+	WVP = Mult_4x4(cube3World, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (cube3World);
 	cbPerObj.WVP = WVP;
 
 	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
@@ -805,6 +845,32 @@ void GraphicsProject::Render(){
 
 	devContext->RSSetState(rState_B);
 	devContext->DrawIndexed(36, 0, 0);
+#pragma endregion
+
+#pragma region Draw Cube4
+	WVP = Mult_4x4(cube4World, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (cube4World);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+	devContext->RSSetState(rState_F_AA);
+	devContext->OMSetBlendState(textureBlendState, NULL, 0xffffffff);
+	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
+	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
+	devContext->VSSetShader(VS, NULL, 0);
+	devContext->PSSetShader(PS, NULL, 0);
+	devContext->IASetInputLayout(vertLayout);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	devContext->PSSetShaderResources(0, 1, &TransparentCubeTexture);
+	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->DrawIndexed(36, 0, 0);
+
+	devContext->RSSetState(rState_B);
+	devContext->DrawIndexed(36, 0, 0);
+#pragma endregion
 
 	swapChain->Present(0, 0);
 }
