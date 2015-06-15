@@ -42,6 +42,11 @@ struct FLOAT4{
 	}
 };
 
+struct SIMPLE_VERTEX{
+	FLOAT4 pos;
+	FLOAT4 color;
+};
+
 struct VERTEX{
 
 	VERTEX(){}
@@ -51,7 +56,7 @@ struct VERTEX{
 	: pos(x, y, z), texCoord(u, v), normal(nx, ny, nz){}
 
 	FLOAT3 pos;
-	FLOAT4 texCoord;
+	FLOAT2 texCoord;
 	FLOAT3 normal;
 };
 
@@ -106,9 +111,15 @@ struct MATRIX4X4{
 struct Light{
 	Light(){ ZeroMemory(this, sizeof(Light)); }
 
-	FLOAT3 dir;
-	float pad;
-	FLOAT4 ambient;
+	FLOAT3 direction;
+	float pad1;
+
+	//FLOAT3 position;
+	//float range;
+	//FLOAT3 attenuation;
+	//float pad2;
+
+	FLOAT4 ambientColor;
 	FLOAT4 diffuse;
 };
 

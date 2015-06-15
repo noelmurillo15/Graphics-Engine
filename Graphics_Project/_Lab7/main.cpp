@@ -39,9 +39,7 @@ class GraphicsProject {
 
 	ID3D11Buffer*			cbPerObjectBuffer = nullptr;
 	ID3D11Buffer*			cbPerFrameBuffer = nullptr;
-	ID3D11Buffer*			iBuffer_Cube = nullptr;
-	ID3D11Buffer*			vBuffer_Cube = nullptr;
-	
+		
 	ID3D11VertexShader*		VS = nullptr;
 	ID3D11PixelShader*		PS = nullptr;
 	ID3D11PixelShader*		PS_D2D = nullptr;
@@ -49,9 +47,6 @@ class GraphicsProject {
 	ID3D10Blob*				VS_Buffer = nullptr;
 	ID3D10Blob*				PS_Buffer = nullptr;
 	ID3D10Blob*				PS_D2D_Buffer = nullptr;
-
-	ID3D11ShaderResourceView* CubeTexture = nullptr;
-	ID3D11SamplerState*		ssCube = nullptr;
 
 	ID3D11Texture2D*		dsBuffer = nullptr;
 	ID3D11DepthStencilView* dsView = nullptr;
@@ -62,8 +57,22 @@ class GraphicsProject {
 	ID3D11RasterizerState*	rState_F = nullptr;
 	ID3D11RasterizerState*	rState_Wire = nullptr;
 
+	//	Cube
+	ID3D11Buffer*			iBuffer_Cube = nullptr;
+	ID3D11Buffer*			vBuffer_Cube = nullptr;
+
+	ID3D11ShaderResourceView* CubeTexture = nullptr;
+	ID3D11ShaderResourceView* TransparentCubeTexture = nullptr;
+	ID3D11SamplerState*		ssCube = nullptr;
+	ID3D11BlendState*		textureBlendState = nullptr;
+
+	//	Ground
+	ID3D11Buffer*			iBuffer_Ground = nullptr;
+	ID3D11Buffer*			vBuffer_Ground = nullptr;
+
+	ID3D11ShaderResourceView* GroundTexture = nullptr;
+
 	//	Model Loading
-	Model					m_model;
 	ID3D11Buffer*			iBuffer_Model = nullptr;
 	ID3D11Buffer*			vBuffer_Model = nullptr;
 
@@ -83,8 +92,6 @@ class GraphicsProject {
 
 	ID3D11DepthStencilState*dsState = nullptr;
 
-	//	Star
-
 	//	Input Data
 	IDirectInputDevice8*	DIKeyboard;
 	IDirectInputDevice8*	DIMouse;
@@ -100,6 +107,7 @@ class GraphicsProject {
 	//	Objects
 	cbPerObject		cbPerObj;
 	cbPerFrame		constbuffPerFrame;
+	Model			m_model;
 	Light			light;
 
 	MATRIX4X4		WVP;
@@ -107,18 +115,14 @@ class GraphicsProject {
 	MATRIX4X4		cube2World;
 	MATRIX4X4		modelWorld;
 	MATRIX4X4		skyboxWorld;
+	MATRIX4X4		groundWorld;
+
 	MATRIX4X4		camView;
 	MATRIX4X4		camProjection;
-
-	MATRIX3X3		rotation;
-
 	FLOAT4			camPosition;
 	FLOAT4			camTarget;
 	FLOAT4			camUp;
 
-	/*MATRIX4X4		Rotation;
-	MATRIX4X4		Scale;
-	MATRIX4X4		Translation;*/
 	float			rot = 0.01f;
 
 public:
@@ -284,16 +288,16 @@ bool GraphicsProject::InitScene(){
 	HRESULT result;
 
 #pragma region Compile .fx Shaders
-	result = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "main", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
-	result = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
-	result = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS_D2D", "ps_4_0", 0, 0, 0, &PS_D2D_Buffer, 0, 0);
+	result = D3DX11CompileFromFile(L"ShaderData.fx", 0, 0, "main", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
+	result = D3DX11CompileFromFile(L"ShaderData.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
+	result = D3DX11CompileFromFile(L"ShaderData.fx", 0, 0, "PS_D2D", "ps_4_0", 0, 0, 0, &PS_D2D_Buffer, 0, 0);
 
-	result = device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);	//	vShader cube
-	result = device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);	//	pShader cube
+	result = device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);	
+	result = device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);	
 	result = device->CreatePixelShader(PS_D2D_Buffer->GetBufferPointer(), PS_D2D_Buffer->GetBufferSize(), NULL, &PS_D2D);
 
-	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);	//	vShader cube
-	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);		//	pShader cube
+	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);
+	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);
 #pragma endregion
 
 #pragma region Load Model
@@ -305,9 +309,9 @@ bool GraphicsProject::InitScene(){
 	{
 		// Front Face
 		VERTEX(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, -1.0f, -1.0f),
-		VERTEX(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, -1.0f),
-		VERTEX(1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, -1.0f),
-		VERTEX(1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f),
+		VERTEX(-1.0f,  1.0f, -1.0f, 0.0f, 0.0f, -1.0f,  1.0f, -1.0f),
+		VERTEX( 1.0f,  1.0f, -1.0f, 1.0f, 0.0f,  1.0f,  1.0f, -1.0f),
+		VERTEX( 1.0f, -1.0f, -1.0f, 1.0f, 1.0f,  1.0f, -1.0f, -1.0f),
 
 		// Back Face
 		VERTEX(-1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f),
@@ -367,6 +371,21 @@ bool GraphicsProject::InitScene(){
 	};
 #pragma endregion
 
+#pragma region Ground Setup
+	VERTEX Ground[] =
+	{
+		VERTEX(-1.0f, -1.0f, -1.0f, 100.0f, 100.0f, 0.0f, 1.0f, 0.0f),
+		VERTEX( 1.0f, -1.0f, -1.0f,   0.0f, 100.0f, 0.0f, 1.0f, 0.0f),
+		VERTEX( 1.0f, -1.0f,  1.0f,   0.0f,   0.0f, 0.0f, 1.0f, 0.0f),
+		VERTEX(-1.0f, -1.0f,  1.0f, 100.0f,   0.0f, 0.0f, 1.0f, 0.0f),
+	};
+
+	UINT iGround[] = {
+		0, 1, 2,
+		0, 2, 3,
+	};
+#pragma endregion
+
 #pragma region Skybox Setup
 	skyboxWorld = Identity();
 	skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f); // skybox EXPAND
@@ -382,10 +401,11 @@ bool GraphicsProject::InitScene(){
 
 	unsigned int aspect = (float)BUFFER_WIDTH / BUFFER_HEIGHT;
 	camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, aspect);
+#pragma endregion
 
-		//	light
-	light.dir = FLOAT3(-0.25f, 0.5f, 1.0f);
-	light.ambient = FLOAT4(0.4f, 0.0f, 0.4f, 1.0f);
+#pragma region Light Setup
+	light.direction = FLOAT3(0.0f, -1.0f, 0.0f);
+	light.ambientColor = FLOAT4(0.4f, 0.3f, 0.4f, 1.0f);
 	light.diffuse = FLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 #pragma endregion
 
@@ -399,36 +419,45 @@ bool GraphicsProject::InitScene(){
 
 	D3D11_SUBRESOURCE_DATA iinitData;
 	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
-	iinitData.pSysMem = &iCube;
+	iinitData.pSysMem = iCube;
 
 	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Cube);
 
+		//	Ground
+	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	indexBufferDesc.ByteWidth = sizeof(UINT) * 6;
+	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
+	iinitData.pSysMem = iGround;
+
+	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Ground);
 		//	Skybox
 	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
 	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	indexBufferDesc.ByteWidth = sizeof(const unsigned int) * 1692;
 	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
-	iinitData.pSysMem = &Cube_indicies;
+	iinitData.pSysMem = Cube_indicies;
 
 	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Skybox);
 #pragma endregion
 
 #pragma region VertexBuffer
-		//	Cubes
+	//	Cubes
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	vertexBufferDesc.ByteWidth = sizeof(VERTEX) * 24;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.ByteWidth = sizeof(VERTEX) * 24;
 
 	D3D11_SUBRESOURCE_DATA vertBufferData;
 	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
-	vertBufferData.pSysMem = &Cube;
+	vertBufferData.pSysMem = Cube;
 
 	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Cube);
 
-		//	Skybox
+	//	Skybox
 	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
@@ -437,6 +466,16 @@ bool GraphicsProject::InitScene(){
 	vertBufferData.pSysMem = &Cube_data;
 
 	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Skybox);
+
+	//	Ground
+	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.ByteWidth = sizeof(VERTEX) * 4;
+	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
+	vertBufferData.pSysMem = Ground;
+
+	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Ground);
 #pragma endregion
 
 #pragma region InputLayer
@@ -454,7 +493,8 @@ bool GraphicsProject::InitScene(){
 	arrSize = ARRAYSIZE(vLayout_skybox);
 	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	result = device->CreateInputLayout(vLayout_skybox, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);	//	Layout skybox
+
+	result = device->CreateInputLayout(vLayout_skybox, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);
 #pragma endregion
 
 #pragma region Viewport
@@ -484,8 +524,12 @@ bool GraphicsProject::InitScene(){
 #pragma endregion
 
 #pragma region Load Textures
-		//	Cube
+	//	Cube
+	result = D3DX11CreateShaderResourceViewFromFile(device, L"TransparentGlass.png", NULL, NULL, &TransparentCubeTexture, NULL);
 	result = D3DX11CreateShaderResourceViewFromFile(device, L"grass.jpg", NULL, NULL, &CubeTexture, NULL);
+
+	//	Ground
+	result = D3DX11CreateShaderResourceViewFromFile(device, L"spaceGround.jpg", NULL, NULL, &GroundTexture, NULL);
 
 	//	skybox
 	D3D11_TEXTURE2D_DESC textureDesc;
@@ -506,7 +550,6 @@ bool GraphicsProject::InitScene(){
 		textureSubdata[i].pSysMem = &stars_pixels[stars_leveloffsets[i]];
 		textureSubdata[i].SysMemPitch = sizeof(unsigned int) * (stars_width >> i);
 	}
-
 	result = device->CreateTexture2D(&textureDesc, textureSubdata, &skyboxTexture);
 #pragma endregion
 
@@ -533,6 +576,22 @@ bool GraphicsProject::InitScene(){
 	sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
 	result = device->CreateSamplerState(&sampDesc, &ssSkybox);
+#pragma endregion
+
+#pragma region Blend State
+	D3D11_BLEND_DESC blendDesc;
+	blendDesc.IndependentBlendEnable = FALSE;
+	blendDesc.AlphaToCoverageEnable = FALSE;
+	blendDesc.RenderTarget[0].BlendEnable = TRUE;
+	blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+	blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+
+	result = device->CreateBlendState(&blendDesc, &textureBlendState);
 #pragma endregion
 
 #pragma region RasterDesc
@@ -579,7 +638,7 @@ bool GraphicsProject::Update() {
 	pApp->ChangeTitleBar(lpwinname);
 #pragma endregion
 
-	rot += timeTracker.GetTime() * 3.0025f;
+	rot += timeTracker.GetTime();
 	if (rot > 6.26f)
 		rot = 0.0f;
 
@@ -596,18 +655,21 @@ bool GraphicsProject::Update() {
 	cube1World = Identity();
 	cube2World = Identity();
 	modelWorld = Identity();
+	groundWorld = Identity();
 
 		//	Define
-	modelWorld = Scale_4x4(modelWorld, 0.2f, 0.2f, 0.2f);
-	modelWorld = Translate(modelWorld, 0.0f, 0.0f, 6.0f);
-	modelWorld = RotateZ_Local(modelWorld, 6.28f * 2.0f);
+	modelWorld = RotateZ(modelWorld, rot);
+	modelWorld = Translate(modelWorld, 0.0f, -0.8f, 6.0f);
+	modelWorld = Scale_4x4(modelWorld, 0.4f, 0.4f, 0.4f);
 
 	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
 	cube1World = RotateZ(cube1World, rot);
 
-	cube2World = Scale_4x4(cube2World, 0.5f, 0.5f, 0.5f);
-	cube2World = RotateX(cube2World, -rot);
-	cube2World = RotateZ(cube2World, -rot);
+	cube2World = RotateX(cube2World, rot);
+	cube2World = Scale_4x4(cube2World, 2.0f, 2.0f, 2.0f);
+
+	groundWorld = Translate(groundWorld, 0.0f, 0.0f, 0.0f);
+	groundWorld = Scale_4x4(groundWorld, 20.0f, 1.0f, 20.0f);
 
 	Render();
 
@@ -642,7 +704,7 @@ void GraphicsProject::Render(){
 
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-	devContext->RSSetState(rState_F);	//	needs front culling
+	devContext->RSSetState(rState_F);
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Skybox, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Skybox, DXGI_FORMAT_R32_UINT, 0);
 	devContext->VSSetShader(vShader_Skybox, NULL, 0);
@@ -654,6 +716,26 @@ void GraphicsProject::Render(){
 	devContext->DrawIndexed(1692, 0, 0);
 
 	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1, 0);
+
+	//	Ground
+	WVP = Mult_4x4(groundWorld, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (Transpose_4x4(groundWorld));
+	cbPerObj.WVP = WVP;
+
+	stride = sizeof(VERTEX);
+	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+	devContext->IASetVertexBuffers(0, 1, &vBuffer_Ground, &stride, &offset);
+	devContext->IASetIndexBuffer(iBuffer_Ground, DXGI_FORMAT_R32_UINT, 0);
+	devContext->VSSetShader(VS, NULL, 0);
+	devContext->PSSetShader(PS, NULL, 0);
+	devContext->IASetInputLayout(vertLayout);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	devContext->PSSetShaderResources(0, 1, &GroundTexture);
+	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->DrawIndexed(6, 0, 0);
 
 	//	Link Model
 	WVP = Mult_4x4(modelWorld, camView);
@@ -709,15 +791,19 @@ void GraphicsProject::Render(){
 	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-	devContext->RSSetState(rState_Wire);
+	devContext->RSSetState(rState_F);
+	devContext->OMSetBlendState(textureBlendState, NULL, 0xffffffff);
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
 	devContext->VSSetShader(VS, NULL, 0);
 	devContext->PSSetShader(PS, NULL, 0);
 	devContext->IASetInputLayout(vertLayout);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->PSSetShaderResources(0, 1, &CubeTexture);
+	devContext->PSSetShaderResources(0, 1, &TransparentCubeTexture);
 	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->DrawIndexed(36, 0, 0);
+
+	devContext->RSSetState(rState_B);
 	devContext->DrawIndexed(36, 0, 0);
 
 	swapChain->Present(0, 0);
@@ -1052,6 +1138,11 @@ bool GraphicsProject::ShutDown() {
 	vBuffer_Model->Release();
 	iBuffer_Model->Release();
 
+	iBuffer_Ground->Release();
+	vBuffer_Ground->Release();
+
+	GroundTexture->Release();
+
 	VS->Release();
 	PS->Release();
 	PS_D2D->Release();
@@ -1061,7 +1152,10 @@ bool GraphicsProject::ShutDown() {
 	PS_D2D_Buffer->Release();
 
 	CubeTexture->Release();
+	TransparentCubeTexture->Release();
 	ssCube->Release();
+
+	textureBlendState->Release();
 
 	dsBuffer->Release();
 	dsView->Release();

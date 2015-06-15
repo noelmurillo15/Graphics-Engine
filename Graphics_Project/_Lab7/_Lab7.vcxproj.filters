@@ -49,13 +49,19 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Effects.fx">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
     <FxCompile Include="PS_Skybox.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
     <FxCompile Include="VS_Skybox.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="ShaderData.fx">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="PS_Star.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="VS_Star.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
   </ItemGroup>
