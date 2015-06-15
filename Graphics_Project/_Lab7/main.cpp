@@ -404,7 +404,7 @@ bool GraphicsProject::InitScene(){
 #pragma endregion
 
 #pragma region Light Setup
-	light.direction = FLOAT3(0.0f, -1.0f, 0.0f);
+	light.direction = FLOAT3(0.0f, -0.5f, 1.0f);
 	light.ambientColor = FLOAT4(0.4f, 0.3f, 0.4f, 1.0f);
 	light.diffuse = FLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 #pragma endregion
@@ -720,7 +720,7 @@ void GraphicsProject::Render(){
 	//	Ground
 	WVP = Mult_4x4(groundWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
-	cbPerObj.World = (Transpose_4x4(groundWorld));
+	cbPerObj.World = (groundWorld);
 	cbPerObj.WVP = WVP;
 
 	stride = sizeof(VERTEX);
@@ -740,7 +740,7 @@ void GraphicsProject::Render(){
 	//	Link Model
 	WVP = Mult_4x4(modelWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
-	cbPerObj.World = (Transpose_4x4(modelWorld));
+	cbPerObj.World = (modelWorld);
 	cbPerObj.WVP = WVP;
 
 	stride = sizeof(Vert);
@@ -765,7 +765,7 @@ void GraphicsProject::Render(){
 		//	1st Cube
 	WVP = Mult_4x4(cube1World, camView);
 	WVP = Mult_4x4(WVP, camProjection);
-	cbPerObj.World = (Transpose_4x4(cube1World));
+	cbPerObj.World = (cube1World);
 	cbPerObj.WVP = WVP;
 
 	stride = sizeof(VERTEX);	
@@ -785,7 +785,7 @@ void GraphicsProject::Render(){
 		//	2nd Cube
 	WVP = Mult_4x4(cube2World, camView);
 	WVP = Mult_4x4(WVP, camProjection);
-	cbPerObj.World = (Transpose_4x4(cube2World));
+	cbPerObj.World = (cube2World);
 	cbPerObj.WVP = WVP;
 
 	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
