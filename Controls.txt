@@ -1,0 +1,5 @@
+Movement - WASD
+Rotation - Arrow Keys
+Fly / Ground - F / G
+
+Reset Camera - M
