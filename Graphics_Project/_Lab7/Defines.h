@@ -110,21 +110,20 @@ struct Light{
 	Light(){ ZeroMemory(this, sizeof(Light)); }
 
 	FLOAT3 direction;
-	float pad1;
+	float pad;
 
 	FLOAT3 position;
 	float range;
-	FLOAT3 attenuation;
-	float pad2;
 
 	FLOAT4 ambientColor;
-	FLOAT4 diffuse;
 };
 
 	//	Constant buffer structs
 struct cbPerObject{
 	MATRIX4X4 WVP;
 	MATRIX4X4 World;
+
+	//BOOL hasNormMap;
 };
 
 struct cbPerFrame{

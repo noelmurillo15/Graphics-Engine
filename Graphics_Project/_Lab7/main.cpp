@@ -410,11 +410,9 @@ bool GraphicsProject::InitScene(){
 #pragma region Light Setup
 	light.direction = FLOAT3(0.0f, -1.0f, 0.0f);
 	light.ambientColor = FLOAT4(0.8f, 0.8f, 0.8f, 1.0f);
-	light.diffuse = FLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	light.position = FLOAT3(0.0f, 0.0f, 0.0f);
 	light.range = 50.0f;
-	light.attenuation = FLOAT3(0.0f, 0.2f, 0.0f);
 #pragma endregion
 
 #pragma region IndexBuffer
