@@ -407,9 +407,13 @@ bool GraphicsProject::InitScene(){
 #pragma endregion
 
 #pragma region Light Setup
-	light.direction = FLOAT3(0.0f, -0.5f, 1.0f);
-	light.ambientColor = FLOAT4(0.4f, 0.3f, 0.4f, 1.0f);
+	light.direction = FLOAT3(0.0f, -1.0f, 0.0f);
+	light.ambientColor = FLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
 	light.diffuse = FLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+
+	light.position = FLOAT3(0.0f, 0.0f, 0.0f);
+	light.range = 10.0f;
+	light.attenuation = FLOAT3(0.0f, 0.2f, 0.0f);
 #pragma endregion
 
 #pragma region IndexBuffer
@@ -671,16 +675,27 @@ bool GraphicsProject::Update() {
 	cube1World = RotateZ(cube1World, rot);
 
 	cube2World = RotateX(cube2World, rot);
-	cube2World = Scale_4x4(cube2World, 2.0f, 2.0f, 2.0f);
+	cube2World = Scale_4x4(cube2World, 0.8f, 0.8f, 0.8f);
 
 	cube3World = RotateX(cube3World, -rot);
-	cube3World = Translate(cube1World, 0.0f, 0.0f, 5.0f);
+	cube3World = Translate(cube3World, 0.0f, 0.0f, 3.0f);
+	cube3World = Scale_4x4(cube3World, 1.4f, 1.4f, 1.4f);
 
 	cube4World = RotateX(cube4World, rot);
 	cube4World = Translate(cube4World, 0.0f, 0.0f, 10.0f);
+	cube4World = Scale_4x4(cube4World, 2.0f, 2.0f, 2.0f);
 
 	groundWorld = Translate(groundWorld, 0.0f, 0.0f, 0.0f);
 	groundWorld = Scale_4x4(groundWorld, 20.0f, 1.0f, 20.0f);
+
+		//	Reset light
+	DirectX::XMVECTOR vec = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+	vec = DirectX::XMVector3TransformCoord(vec, XMConverter(cube1World));
+
+	DirectX::XMMATRIX temp = XMConverter(cube1World);
+	light.position.x = temp.r[3].m128_f32[0];
+	light.position.y = temp.r[3].m128_f32[1] + 8.0f;
+	light.position.z = temp.r[3].m128_f32[2];
 
 	Render();
 

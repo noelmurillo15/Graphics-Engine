@@ -114,10 +114,10 @@ struct Light{
 	FLOAT3 direction;
 	float pad1;
 
-	//FLOAT3 position;
-	//float range;
-	//FLOAT3 attenuation;
-	//float pad2;
+	FLOAT3 position;
+	float range;
+	FLOAT3 attenuation;
+	float pad2;
 
 	FLOAT4 ambientColor;
 	FLOAT4 diffuse;

@@ -268,6 +268,16 @@ MATRIX4X4 XMConverter(XMMATRIX& A){
 	return output;
 }
 
+DirectX::XMMATRIX XMConverter(MATRIX4X4 A){
+	DirectX::XMMATRIX mat = {
+		A.a, A.b, A.c, A.d,
+		A.e, A.f, A.g, A.h,
+		A.i, A.j, A.k, A.l,
+		A.m, A.n, A.o, A.p
+	};
+	return mat;
+}
+
 MATRIX4X4 CreateViewMatrix(FLOAT4 EyePos, FLOAT4 FocusPos, FLOAT4 UpDir){
 
 	 XMMATRIX tmp = XMMatrixLookAtLH(XMVectorSet(EyePos.x, EyePos.y, EyePos.z, EyePos.w),
