@@ -408,11 +408,11 @@ bool GraphicsProject::InitScene(){
 
 #pragma region Light Setup
 	light.direction = FLOAT3(0.0f, -1.0f, 0.0f);
-	light.ambientColor = FLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	light.ambientColor = FLOAT4(0.8f, 0.8f, 0.8f, 1.0f);
 	light.diffuse = FLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	light.position = FLOAT3(0.0f, 0.0f, 0.0f);
-	light.range = 10.0f;
+	light.range = 50.0f;
 	light.attenuation = FLOAT3(0.0f, 0.2f, 0.0f);
 #pragma endregion
 
@@ -587,14 +587,14 @@ bool GraphicsProject::InitScene(){
 
 #pragma region Blend State
 	D3D11_BLEND_DESC blendDesc;
+	blendDesc.AlphaToCoverageEnable = TRUE;
 	blendDesc.IndependentBlendEnable = FALSE;
-	blendDesc.AlphaToCoverageEnable = FALSE;
 	blendDesc.RenderTarget[0].BlendEnable = TRUE;
 	blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
 	blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
 	blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
-	blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+	blendDesc.RenderTarget[0].SrcBlendAlpha = /*D3D11_BLEND_ONE*/D3D11_BLEND_ZERO;
+	blendDesc.RenderTarget[0].DestBlendAlpha = /*D3D11_BLEND_ZERO*/D3D11_BLEND_SRC_ALPHA;
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 	blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 
