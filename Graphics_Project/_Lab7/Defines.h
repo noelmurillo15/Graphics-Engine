@@ -37,14 +37,20 @@ struct FLOAT4{
 	FLOAT4(float _x, float _y, float _z, float _w){
 		x = _x; y = _y; z = _z; w = _w;
 	}
-	FLOAT4(float _x, float _y){
-		x = _x; y = _y; z = 0; w = 0;
+};
+
+struct COLORGBA{
+	float r, g, b, a;
+
+	COLORGBA() = default;
+	COLORGBA(float _r, float _g, float _b, float _a){
+		r = _r; g = _g; b = _b; a = _a;
 	}
 };
 
 struct SIMPLE_VERTEX{
 	FLOAT4 pos;
-	FLOAT4 color;
+	COLORGBA color;
 };
 
 struct VERTEX{
@@ -71,14 +77,6 @@ struct Model{
 	std::vector<unsigned int> out_Indicies;
 };
 
-struct COLORGBA{
-	float r = 0, g = 0, b = 0, a = 255;
-
-	COLORGBA() = default;
-	COLORGBA(float _r, float _g, float _b, float _a){
-		r = _r; g = _g; b = _b; a = _a;
-	}
-};
 
 struct MATRIX3X3{
 	float a, b, c;
@@ -123,6 +121,7 @@ struct Light{
 	FLOAT4 diffuse;
 };
 
+	//	Constant buffer structs
 struct cbPerObject{
 	MATRIX4X4 WVP;
 	MATRIX4X4 World;
