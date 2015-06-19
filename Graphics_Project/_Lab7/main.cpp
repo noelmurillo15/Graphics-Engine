@@ -4,11 +4,14 @@
 #include "CPUClass.h"
 
 #include "Cube.h"
-#include "stars.h"
+
+#include "DDSTextureLoader.h"
 
 #include <ctime>
 #include <string>
 
+#include "VS.csh"
+#include "PS.csh"
 #include "PS_Skybox.csh"
 #include "VS_Skybox.csh"
 
@@ -16,7 +19,7 @@
 #pragma comment (lib, "dinput8.lib")
 #pragma comment (lib, "dxguid.lib")
 
-#define BUFFER_WIDTH	1280
+#define BUFFER_WIDTH	1024
 #define BUFFER_HEIGHT	768
 
 
@@ -37,61 +40,53 @@ class GraphicsProject {
 
 	ID3D11InputLayout*		vertLayout = nullptr;
 
-	ID3D11Buffer*			cbPerObjectBuffer = nullptr;
-	ID3D11Buffer*			cbPerFrameBuffer = nullptr;
-		
-	ID3D11VertexShader*		VS = nullptr;
-	ID3D11PixelShader*		PS = nullptr;
-	ID3D11PixelShader*		PS_D2D = nullptr;
-
-	ID3D10Blob*				VS_Buffer = nullptr;
-	ID3D10Blob*				PS_Buffer = nullptr;
-	ID3D10Blob*				PS_D2D_Buffer = nullptr;
-
 	ID3D11Texture2D*		dsBuffer = nullptr;
 	ID3D11DepthStencilView* dsView = nullptr;
+	ID3D11DepthStencilState*dsState = nullptr;
+
+	//	Buffers
+	ID3D11Buffer*			cbPerObjectBuffer = nullptr;
+	ID3D11Buffer*			cbPerFrameBuffer = nullptr;
+
+	ID3D11Buffer*			vBuffer_Skybox = nullptr;
+	ID3D11Buffer*			iBuffer_Skybox = nullptr;
+
+	ID3D11Buffer*			iBuffer_Cube = nullptr;
+	ID3D11Buffer*			vBuffer_Cube = nullptr;
+
+	ID3D11Buffer*			iBuffer_Ground = nullptr;
+	ID3D11Buffer*			vBuffer_Ground = nullptr;
+
+	ID3D11Buffer*			iBuffer_Model = nullptr;
+	ID3D11Buffer*			vBuffer_Model = nullptr;
+
+	//	Shaders
+	ID3D11VertexShader*		vShader = nullptr;
+	ID3D11PixelShader*		pShader = nullptr;
+
+	ID3D11VertexShader*		vShader_Skybox = nullptr;
+	ID3D11PixelShader*		pShader_Skybox = nullptr;
 	
+	//	Raster States
 	ID3D11RasterizerState*	rState_B_AA = nullptr;
 	ID3D11RasterizerState*	rState_B = nullptr;
 	ID3D11RasterizerState*	rState_F_AA = nullptr;
 	ID3D11RasterizerState*	rState_F = nullptr;
 	ID3D11RasterizerState*	rState_Wire = nullptr;
 
+	//	Textures
+	ID3D11ShaderResourceView* srvSkymap = nullptr;
+	ID3D11ShaderResourceView* srvGlass = nullptr;	
+	ID3D11ShaderResourceView* srvGrass = nullptr;
+	ID3D11ShaderResourceView* srvGround = nullptr;
+
 	//	Cube
-	ID3D11Buffer*			iBuffer_Cube = nullptr;
-	ID3D11Buffer*			vBuffer_Cube = nullptr;
-
-	ID3D11ShaderResourceView* CubeTexture = nullptr;
-	ID3D11ShaderResourceView* TransparentCubeTexture = nullptr;
-
 	ID3D11SamplerState*		ssCube = nullptr;
-	ID3D11BlendState*		textureBlendState = nullptr;
-
-	//	Ground
-	ID3D11Buffer*			iBuffer_Ground = nullptr;
-	ID3D11Buffer*			vBuffer_Ground = nullptr;
-
-	ID3D11ShaderResourceView* GroundTexture = nullptr;
-
-	//	Model Loading
-	ID3D11Buffer*			iBuffer_Model = nullptr;
-	ID3D11Buffer*			vBuffer_Model = nullptr;
-
+	ID3D11BlendState*		bsTransparency = nullptr;
+	
 	//	Skybox
-	ID3D11InputLayout*		skyboxLayout = nullptr;
-
-	ID3D11Buffer*			vBuffer_Skybox = nullptr;
-	ID3D11Buffer*			iBuffer_Skybox = nullptr;
-
-	ID3D11VertexShader*		vShader_Skybox = nullptr;
-	ID3D11PixelShader*		pShader_Skybox = nullptr;
-
 	ID3D11SamplerState*		ssSkybox = nullptr;
-
-	ID3D11Texture2D*		skyboxTexture = nullptr;
-	ID3D11ShaderResourceView* srvSkybox = nullptr;
-
-	ID3D11DepthStencilState*dsState = nullptr;
+	ID3D11InputLayout*		skyboxLayout = nullptr;
 
 	//	Input Data
 	IDirectInputDevice8*	DIKeyboard;
@@ -108,10 +103,12 @@ class GraphicsProject {
 	//	Objects
 	cbPerObject		cbPerObj;
 	cbPerFrame		constbuffPerFrame;
+
 	Model			m_model;
 	Light			light;
 
 	MATRIX4X4		WVP;
+
 	MATRIX4X4		cube1World;
 	MATRIX4X4		cube2World;
 	MATRIX4X4		cube3World;
@@ -292,13 +289,8 @@ bool GraphicsProject::InitScene(){
 	HRESULT result;
 
 #pragma region Compile .fx Shaders
-	result = D3DX11CompileFromFile(L"ShaderData.fx", 0, 0, "main", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
-	result = D3DX11CompileFromFile(L"ShaderData.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
-	result = D3DX11CompileFromFile(L"ShaderData.fx", 0, 0, "PS_D2D", "ps_4_0", 0, 0, 0, &PS_D2D_Buffer, 0, 0);
-
-	result = device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);	
-	result = device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);	
-	result = device->CreatePixelShader(PS_D2D_Buffer->GetBufferPointer(), PS_D2D_Buffer->GetBufferSize(), NULL, &PS_D2D);
+	result = device->CreateVertexShader(VS, sizeof(VS), NULL, &vShader);
+	result = device->CreatePixelShader(PS, sizeof(PS), NULL, &pShader);
 
 	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);
 	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);
@@ -492,7 +484,7 @@ bool GraphicsProject::InitScene(){
 	layout[2] = { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 
 	UINT arrSize = ARRAYSIZE(layout);
-	result = device->CreateInputLayout(layout, arrSize, VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertLayout);
+	result = device->CreateInputLayout(layout, arrSize, VS, sizeof(VS), &vertLayout);
 
 		//	VS_Skybox
 	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[2];
@@ -530,33 +522,10 @@ bool GraphicsProject::InitScene(){
 #pragma endregion
 
 #pragma region Load Textures
-	//	Cube
-	result = D3DX11CreateShaderResourceViewFromFile(device, L"TransparentGlass.png", NULL, NULL, &TransparentCubeTexture, NULL);
-	result = D3DX11CreateShaderResourceViewFromFile(device, L"grass.jpg", NULL, NULL, &CubeTexture, NULL);
-
-	//	Ground
-	result = D3DX11CreateShaderResourceViewFromFile(device, L"spaceGround.jpg", NULL, NULL, &GroundTexture, NULL);
-
-	//	skybox
-	D3D11_TEXTURE2D_DESC textureDesc;
-	ZeroMemory(&textureDesc, sizeof(D3D11_TEXTURE2D_DESC));
-	textureDesc.Usage = D3D11_USAGE_DEFAULT;
-	textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-	textureDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-	textureDesc.Width = stars_width;
-	textureDesc.Height = stars_height;
-	textureDesc.MipLevels = stars_numlevels;
-	textureDesc.ArraySize = 1;
-	textureDesc.SampleDesc.Count = 1;
-
-	D3D11_SUBRESOURCE_DATA textureSubdata[stars_numlevels];
-	ZeroMemory(&textureSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
-
-	for (int i = 0; i < stars_numlevels; i++){
-		textureSubdata[i].pSysMem = &stars_pixels[stars_leveloffsets[i]];
-		textureSubdata[i].SysMemPitch = sizeof(unsigned int) * (stars_width >> i);
-	}
-	result = device->CreateTexture2D(&textureDesc, textureSubdata, &skyboxTexture);
+	result = CreateDDSTextureFromFile(device, L"_skymap.dds", NULL, &srvSkymap, NULL);
+	result = CreateDDSTextureFromFile(device, L"_grass.dds", NULL, &srvGrass, NULL);
+	result = CreateDDSTextureFromFile(device, L"_glass.dds", NULL, &srvGlass, NULL);
+	result = CreateDDSTextureFromFile(device, L"_ground.dds", NULL, &srvGround, NULL);
 #pragma endregion
 
 #pragma region SamplerState
@@ -568,6 +537,7 @@ bool GraphicsProject::InitScene(){
 	sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
 	sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 	sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	sampDesc.MaxAnisotropy = 1;
 
 	result = device->CreateSamplerState(&sampDesc, &ssCube);
 
@@ -589,15 +559,15 @@ bool GraphicsProject::InitScene(){
 	blendDesc.AlphaToCoverageEnable = TRUE;
 	blendDesc.IndependentBlendEnable = FALSE;
 	blendDesc.RenderTarget[0].BlendEnable = TRUE;
-	blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
-	blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_COLOR;
+	blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_BLEND_FACTOR;
+	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;	
+	blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
 	blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;	
-	blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_SRC_ALPHA;
-	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 	blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-	result = device->CreateBlendState(&blendDesc, &textureBlendState);
+	result = device->CreateBlendState(&blendDesc, &bsTransparency);
 #pragma endregion
 
 #pragma region RasterDesc
@@ -646,14 +616,7 @@ bool GraphicsProject::Update() {
 
 	rot += timeTracker.GetTime();
 	if (rot > 6.26f)
-		rot = 0.0f;
-
-		//	Update Skybox Texture
-	if (srvSkybox) {
-		srvSkybox->Release();
-		srvSkybox = nullptr;
-	}
-	HRESULT result = device->CreateShaderResourceView(skyboxTexture, NULL, &srvSkybox);	//	Shadr res view
+		rot = 0.0f;		
 
 		//	Reset 
 	WVP = Identity();
@@ -703,9 +666,14 @@ bool GraphicsProject::Update() {
 
 void GraphicsProject::Render(){
 
+	UINT stride, offset;
+	HRESULT result;
+
 	//	Background Color
 	FLOAT RGBA[4]; RGBA[0] = 0; RGBA[1] = 0; RGBA[2] = 0; RGBA[3] = 1;
-	UINT stride, offset;
+
+	//	Blend Factor
+	float blendFactor[] = { 0.25f, 0.25f, 0.25f, 0.25f };
 
 	//	Clear views
 	devContext->ClearRenderTargetView(rtView, RGBA);
@@ -735,7 +703,8 @@ void GraphicsProject::Render(){
 	devContext->VSSetShader(vShader_Skybox, NULL, 0);
 	devContext->PSSetShader(pShader_Skybox, NULL, 0);
 	devContext->IASetInputLayout(skyboxLayout);
-	devContext->PSSetShaderResources(0, 1, &srvSkybox);
+	devContext->OMSetBlendState(0, 0, 0xffffffff);
+	devContext->PSSetShaderResources(0, 1, &srvSkymap);
 	devContext->PSSetSamplers(0, 1, &ssSkybox);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	devContext->DrawIndexed(1692, 0, 0);
@@ -755,12 +724,12 @@ void GraphicsProject::Render(){
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Ground, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Ground, DXGI_FORMAT_R32_UINT, 0);
-	devContext->VSSetShader(VS, NULL, 0);
-	devContext->PSSetShader(PS, NULL, 0);
+	devContext->VSSetShader(vShader, NULL, 0);
+	devContext->PSSetShader(pShader, NULL, 0);
 	devContext->IASetInputLayout(vertLayout);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->PSSetShaderResources(0, 1, &GroundTexture);
-	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->PSSetShaderResources(0, 1, &srvGround);
+	devContext->PSSetSamplers(0, 1, &ssSkybox);
 	devContext->DrawIndexed(6, 0, 0);
 #pragma endregion
 
@@ -779,8 +748,8 @@ void GraphicsProject::Render(){
 	devContext->RSSetState(rState_B);
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Model, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Model, DXGI_FORMAT_R32_UINT, 0);
-	devContext->VSSetShader(VS, NULL, 0);
-	devContext->PSSetShader(PS, NULL, 0);
+	devContext->VSSetShader(vShader, NULL, 0);
+	devContext->PSSetShader(pShader, NULL, 0);
 	devContext->IASetInputLayout(vertLayout);
 	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -802,11 +771,11 @@ void GraphicsProject::Render(){
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);	
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-	devContext->VSSetShader(VS, NULL, 0);
-	devContext->PSSetShader(PS, NULL, 0);
+	devContext->VSSetShader(vShader, NULL, 0);
+	devContext->PSSetShader(pShader, NULL, 0);
 	devContext->IASetInputLayout(vertLayout);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->PSSetShaderResources(0, 1, &CubeTexture);
+	devContext->PSSetShaderResources(0, 1, &srvGrass);
 	devContext->PSSetSamplers(0, 1, &ssCube);
 	devContext->DrawIndexed(36, 0, 0);
 #pragma endregion
@@ -815,24 +784,24 @@ void GraphicsProject::Render(){
 	WVP = Mult_4x4(cube2World, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (cube2World);
-	cbPerObj.WVP = WVP;
+	cbPerObj.WVP = WVP;	
 
 	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-	devContext->RSSetState(rState_F_AA);
-	devContext->OMSetBlendState(textureBlendState, NULL, 0xffffffff);
+	devContext->RSSetState(rState_F);
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-	devContext->VSSetShader(VS, NULL, 0);
-	devContext->PSSetShader(PS, NULL, 0);
+	devContext->VSSetShader(vShader, NULL, 0);
+	devContext->PSSetShader(pShader, NULL, 0);
 	devContext->IASetInputLayout(vertLayout);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->PSSetShaderResources(0, 1, &TransparentCubeTexture);
+	devContext->PSSetShaderResources(0, 1, &srvGlass);
 	devContext->PSSetSamplers(0, 1, &ssCube);
 	devContext->DrawIndexed(36, 0, 0);
 
-	devContext->RSSetState(rState_B_AA);
+	devContext->RSSetState(rState_B);
 	devContext->DrawIndexed(36, 0, 0);
 #pragma endregion
 
@@ -846,14 +815,14 @@ void GraphicsProject::Render(){
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 	devContext->RSSetState(rState_F);
-	devContext->OMSetBlendState(textureBlendState, NULL, 0xffffffff);
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-	devContext->VSSetShader(VS, NULL, 0);
-	devContext->PSSetShader(PS, NULL, 0);
+	devContext->VSSetShader(vShader, NULL, 0);
+	devContext->PSSetShader(pShader, NULL, 0);
 	devContext->IASetInputLayout(vertLayout);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->PSSetShaderResources(0, 1, &TransparentCubeTexture);
+	devContext->PSSetShaderResources(0, 1, &srvGlass);
 	devContext->PSSetSamplers(0, 1, &ssCube);
 	devContext->DrawIndexed(36, 0, 0);
 
@@ -871,14 +840,14 @@ void GraphicsProject::Render(){
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 	devContext->RSSetState(rState_F_AA);
-	devContext->OMSetBlendState(textureBlendState, NULL, 0xffffffff);
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-	devContext->VSSetShader(VS, NULL, 0);
-	devContext->PSSetShader(PS, NULL, 0);
+	devContext->VSSetShader(vShader, NULL, 0);
+	devContext->PSSetShader(pShader, NULL, 0);
 	devContext->IASetInputLayout(vertLayout);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->PSSetShaderResources(0, 1, &TransparentCubeTexture);
+	devContext->PSSetShaderResources(0, 1, &srvGlass);
 	devContext->PSSetSamplers(0, 1, &ssCube);
 	devContext->DrawIndexed(36, 0, 0);
 
@@ -1024,7 +993,6 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	DIKeyboard->GetDeviceState(sizeof(keyboardState), (LPVOID)&keyboardState);
 
 	if (keyboardState[DIK_ESCAPE] & 0x80){
-		int x = 0;
 		PostMessage(pApp->window, WM_DESTROY, 0, 0);
 	}
 
@@ -1036,7 +1004,6 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	float negRotate = -(5.0f * (float)time);
 	float posRotate = 5.0f * (float)time;
 
-		//	DIK_ & 0x80	
 	//	cam Movement
 	if (keyboardState[DIK_W] & 0x80)
 		camView = Translate(camView, 0.0f, 0.0f, negMove);
@@ -1221,21 +1188,9 @@ bool GraphicsProject::ShutDown() {
 	iBuffer_Ground->Release();
 	vBuffer_Ground->Release();
 
-	GroundTexture->Release();
-
-	VS->Release();
-	PS->Release();
-	PS_D2D->Release();
-
-	VS_Buffer->Release();
-	PS_Buffer->Release();
-	PS_D2D_Buffer->Release();
-
-	CubeTexture->Release();
-	TransparentCubeTexture->Release();
 	ssCube->Release();
 
-	textureBlendState->Release();
+	bsTransparency->Release();
 
 	dsBuffer->Release();
 	dsView->Release();
@@ -1249,10 +1204,15 @@ bool GraphicsProject::ShutDown() {
 	vShader_Skybox->Release();
 	pShader_Skybox->Release();
 
+	vShader->Release();
+	pShader->Release();
+
 	ssSkybox->Release();
 
-	srvSkybox->Release();
-	skyboxTexture->Release();
+	srvGlass->Release();
+	srvGrass->Release();
+	srvGround->Release();
+	srvSkymap->Release();
 
 	rState_B_AA->Release();
 	rState_B->Release();

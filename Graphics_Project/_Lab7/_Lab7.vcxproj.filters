@@ -30,6 +30,9 @@
     <ClInclude Include="TimerClass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="DDSTextureLoader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MathFunc.cpp">
@@ -47,6 +50,9 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="DDSTextureLoader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="PS_Skybox.hlsl">
@@ -55,13 +61,16 @@
     <FxCompile Include="VS_Skybox.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
-    <FxCompile Include="ShaderData.fx">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
     <FxCompile Include="PS_Star.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
     <FxCompile Include="VS_Star.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="PS.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="VS.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
   </ItemGroup>
