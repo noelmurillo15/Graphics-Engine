@@ -1,37 +1,28 @@
 #pragma pack_matrix(row_major)
 
+cbuffer cbPerObject {
+	float4x4 WVP;
+	float4x4 World;
+};
 
 struct INPUT_VERTEX {
+	float4 pos : POSITION;
 	float4 color : COLOR;
-	float4 coordinate : POSITION;
 };
 
 struct OUTPUT_VERTEX {
+	float4 posOut : SV_POSITION;
 	float4 colorOut : COLOR;
-	float4 projectedCoordinate : SV_POSITION;
 };
 
-cbuffer OBJECT : register(b1) {
-	float4x4 world;
-	float4x4 view;
-	float4x4 projection;
-
-	float4x4 skybox;
-	float4x4 grid;
-	float4x4 star;
-	float4x4 cube;
-};
 
 OUTPUT_VERTEX main(INPUT_VERTEX fromVertexBuffer)
 {
-	OUTPUT_VERTEX sendToRasterizer = (OUTPUT_VERTEX)0;
-	sendToRasterizer.projectedCoordinate = fromVertexBuffer.coordinate;
+	OUTPUT_VERTEX output = (OUTPUT_VERTEX)0;
 
-	sendToRasterizer.projectedCoordinate = mul(fromVertexBuffer.coordinate, star);
-	sendToRasterizer.projectedCoordinate = mul(sendToRasterizer.projectedCoordinate, view);
-	sendToRasterizer.projectedCoordinate = mul(sendToRasterizer.projectedCoordinate, projection);
+	output.posOut = mul(fromVertexBuffer.pos, WVP);
 
-	sendToRasterizer.colorOut = fromVertexBuffer.color;
+	output.colorOut = fromVertexBuffer.color;
 
-	return sendToRasterizer;
+	return output;
 }

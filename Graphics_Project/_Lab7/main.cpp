@@ -11,6 +11,8 @@
 
 #include "VS.csh"
 #include "PS.csh"
+#include "VS_Star.csh"
+#include "PS_Star.csh"
 #include "PS_Skybox.csh"
 #include "VS_Skybox.csh"
 
@@ -38,6 +40,7 @@ class GraphicsProject {
 	ID3D11RenderTargetView* rtView = nullptr;
 
 	ID3D11InputLayout*		vertLayout = nullptr;
+	ID3D11InputLayout*		starLayout = nullptr;
 
 	ID3D11Texture2D*		dsBuffer = nullptr;
 	ID3D11DepthStencilView* dsView = nullptr;
@@ -59,9 +62,15 @@ class GraphicsProject {
 	ID3D11Buffer*			iBuffer_Model = nullptr;
 	ID3D11Buffer*			vBuffer_Model = nullptr;
 
+	ID3D11Buffer*			iBuffer_Star = nullptr;
+	ID3D11Buffer*			vBuffer_Star = nullptr;
+
 	//	Shaders
 	ID3D11VertexShader*		vShader = nullptr;
 	ID3D11PixelShader*		pShader = nullptr;
+
+	ID3D11VertexShader*		vShader_Star = nullptr;
+	ID3D11PixelShader*		pShader_Star = nullptr;
 
 	ID3D11VertexShader*		vShader_Skybox = nullptr;
 	ID3D11PixelShader*		pShader_Skybox = nullptr;
@@ -116,6 +125,7 @@ class GraphicsProject {
 	MATRIX4X4		modelWorld;
 	MATRIX4X4		skyboxWorld;
 	MATRIX4X4		groundWorld;
+	MATRIX4X4		starWorld;
 
 	MATRIX4X4		camView;
 	MATRIX4X4		camProjection;
@@ -292,12 +302,15 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateVertexShader(VS, sizeof(VS), NULL, &vShader);
 	result = device->CreatePixelShader(PS, sizeof(PS), NULL, &pShader);
 
+	result = device->CreateVertexShader(VS_Star, sizeof(VS_Star), NULL, &vShader_Star);
+	result = device->CreatePixelShader(PS_Star, sizeof(PS_Star), NULL, &pShader_Star);
+
 	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);
 	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);
 #pragma endregion
 
 #pragma region Load Model
-	loadOBJ("Link_tri.obj");
+	loadOBJ("Barrel.obj");
 #pragma endregion
 
 #pragma region Cube Setup
@@ -382,6 +395,119 @@ bool GraphicsProject::InitScene(){
 	};
 #pragma endregion
 
+#pragma region Star Setup
+	starWorld = Identity();
+	starWorld = Translate(starWorld, 0.0f, 10.0f, 0.0f);
+
+	SIMPLE_VERTEX Star[20];
+	unsigned int iStar[108];
+
+	Star[0].pos = Star[10].pos = { 0, 1, 0, 0 };
+	Star[1].pos = Star[11].pos = { 0.4f, 0.2f, 0, 0 };
+	Star[2].pos = Star[12].pos = { 1, 0, 0, 0 };
+	Star[3].pos = Star[13].pos = { 0.5f, -0.4f, 0, 0 };
+	Star[4].pos = Star[14].pos = { 0.75f, -1, 0, 0 };
+	Star[5].pos = Star[15].pos = { 0, -0.65f, 0, 0 };
+	Star[6].pos = Star[16].pos = { -0.75f, -1, 0, 0 };
+	Star[7].pos = Star[17].pos = { -0.5f, -0.4f, 0, 0 };
+	Star[8].pos = Star[18].pos = { -1, 0, 0, 0 };
+	Star[9].pos = Star[19].pos = { -0.4f, 0.2f, 0, 0 };
+
+	for (int x = 0; x < 10; ++x){
+		Star[x].pos.z = -0.25f;
+		Star[10 + x].pos.z = 0.25f;
+
+		Star[x].pos.w = 1;
+		Star[10 + x].pos.w = 1;
+
+		// Tips of Star       R  G  B  A
+		Star[x].color = { 0, 0, 0, 1 };
+		Star[10 + x].color = { 0, 0, 0, 1 };
+	}
+	//	Inside Star					   R  G  B  A
+	Star[11].color = Star[1].color = { 1, 0, 0, 1 };
+	Star[13].color = Star[3].color = { 1, 1, 0, 1 };
+	Star[15].color = Star[5].color = { 1, 0, 1, 1 };
+	Star[17].color = Star[7].color = { 0, 1, 1, 1 };
+	Star[19].color = Star[9].color = { 0, 1, 0, 1 };
+
+	// front star     back star
+	// clock-wise    counter clock-wise
+	iStar[0] = 0;	iStar[24] = 11;
+	iStar[1] = 1; 	iStar[25] = 10; //1   
+	iStar[2] = 9;	iStar[26] = 19;
+
+	iStar[3] = 1;	iStar[27] = 13;
+	iStar[4] = 2;	iStar[28] = 12; //2
+	iStar[5] = 3;	iStar[29] = 11;
+
+	iStar[6] = 3;	iStar[30] = 15;
+	iStar[7] = 4; 	iStar[31] = 14; //3
+	iStar[8] = 5;	iStar[32] = 13;
+
+	iStar[9] = 5;	iStar[33] = 17;
+	iStar[10] = 6; 	iStar[34] = 16; //4
+	iStar[11] = 7;	iStar[35] = 15;
+
+	iStar[12] = 7;	iStar[36] = 19;
+	iStar[13] = 8; 	iStar[37] = 18; //5
+	iStar[14] = 9;	iStar[38] = 17;
+
+	iStar[15] = 5;	iStar[39] = 19;
+	iStar[16] = 7; 	iStar[40] = 17; //6
+	iStar[17] = 9;	iStar[41] = 15;
+
+	iStar[18] = 3;	iStar[42] = 11;
+	iStar[19] = 5; 	iStar[43] = 15; //7
+	iStar[20] = 1;	iStar[44] = 13;
+
+	iStar[21] = 5;	iStar[45] = 11;
+	iStar[22] = 9; 	iStar[46] = 19; //8
+	iStar[23] = 1;	iStar[47] = 15;
+
+	//			 in between
+	// clockwise        counter clock-wise
+	iStar[48] = 10;		iStar[51] = 10;
+	iStar[49] = 1;		iStar[52] = 11;
+	iStar[50] = 0;		iStar[53] = 1;
+
+	iStar[54] = 10;		iStar[57] = 10;
+	iStar[55] = 0;		iStar[58] = 9;
+	iStar[56] = 9;		iStar[59] = 19;
+
+	iStar[60] = 17;		iStar[63] = 17;
+	iStar[61] = 7;		iStar[64] = 6;
+	iStar[62] = 6;		iStar[65] = 16;
+
+	iStar[66] = 18;		iStar[69] = 18;
+	iStar[67] = 8;		iStar[70] = 7;
+	iStar[68] = 7;		iStar[71] = 17;
+
+	iStar[72] = 19;		iStar[75] = 19;
+	iStar[73] = 9;		iStar[76] = 8;
+	iStar[74] = 8;		iStar[77] = 18;
+
+	iStar[78] = 1;		iStar[81] = 1;
+	iStar[79] = 11;		iStar[82] = 12;
+	iStar[80] = 12;		iStar[83] = 2;
+
+	iStar[84] = 3;		iStar[87] = 3;
+	iStar[85] = 13;		iStar[88] = 14;
+	iStar[86] = 14;		iStar[89] = 4;
+
+	iStar[90] = 2;		iStar[93] = 2;
+	iStar[91] = 12;		iStar[94] = 13;
+	iStar[92] = 13;		iStar[95] = 3;
+
+	iStar[96] = 15;		iStar[99] = 15;
+	iStar[97] = 5;		iStar[100] = 4;
+	iStar[98] = 4;		iStar[101] = 14;
+
+	iStar[102] = 5;		iStar[105] = 5;
+	iStar[103] = 15;	iStar[106] = 16;
+	iStar[104] = 16;	iStar[107] = 6;
+#pragma endregion
+
 #pragma region Skybox Setup
 	skyboxWorld = Identity();
 	skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f); // skybox EXPAND
@@ -405,6 +531,33 @@ bool GraphicsProject::InitScene(){
 
 	light.position = FLOAT3(0.0f, 0.0f, 0.0f);
 	light.range = 50.0f;
+#pragma endregion
+
+#pragma region InputLayer
+	//	VS
+	D3D11_INPUT_ELEMENT_DESC layout[3];
+	layout[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	layout[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	layout[2] = { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+
+	UINT arrSize = ARRAYSIZE(layout);
+	result = device->CreateInputLayout(layout, arrSize, VS, sizeof(VS), &vertLayout);
+
+	//	VS_Skybox
+	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[2];
+	arrSize = ARRAYSIZE(vLayout_skybox);
+	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+
+	result = device->CreateInputLayout(vLayout_skybox, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);
+
+	//	VS_Star
+	D3D11_INPUT_ELEMENT_DESC vLayout_Star[2];
+	arrSize = ARRAYSIZE(vLayout_Star);
+	vLayout_Star[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	vLayout_Star[1] = { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+
+	result = device->CreateInputLayout(vLayout_Star, arrSize, VS_Star, sizeof(VS_Star), &starLayout);
 #pragma endregion
 
 #pragma region IndexBuffer
@@ -434,11 +587,21 @@ bool GraphicsProject::InitScene(){
 	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
 	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	indexBufferDesc.ByteWidth = sizeof(const unsigned int) * 1692;
+	indexBufferDesc.ByteWidth = sizeof(unsigned int) * 1692;
 	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
 	iinitData.pSysMem = Cube_indicies;
 
 	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Skybox);
+
+	//	Star
+	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	indexBufferDesc.ByteWidth = sizeof(unsigned int) * 108;
+	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
+	iinitData.pSysMem = iStar;
+
+	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Star);
 #pragma endregion
 
 #pragma region VertexBuffer
@@ -474,25 +637,16 @@ bool GraphicsProject::InitScene(){
 	vertBufferData.pSysMem = Ground;
 
 	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Ground);
-#pragma endregion
 
-#pragma region InputLayer
-		//	VS
-	D3D11_INPUT_ELEMENT_DESC layout[3];
-	layout[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	layout[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	layout[2] = { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	//	Star
+	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.ByteWidth = sizeof(SIMPLE_VERTEX) * 20;
+	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
+	vertBufferData.pSysMem = Star;
 
-	UINT arrSize = ARRAYSIZE(layout);
-	result = device->CreateInputLayout(layout, arrSize, VS, sizeof(VS), &vertLayout);
-
-		//	VS_Skybox
-	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[2];
-	arrSize = ARRAYSIZE(vLayout_skybox);
-	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-
-	result = device->CreateInputLayout(vLayout_skybox, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);
+	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Star);
 #pragma endregion
 
 #pragma region Viewport
@@ -621,7 +775,7 @@ bool GraphicsProject::Update() {
 
 #pragma region Reset Worlds
 	WVP = Identity();
-	cbPerObj.World = WVP;
+	cbPerObj.World = WVP;	
 	cube1World = Identity();
 	cube2World = Identity();
 	cube3World = Identity();
@@ -631,17 +785,10 @@ bool GraphicsProject::Update() {
 	groundWorld = Identity();
 #pragma endregion
 
-#pragma region Reset Light
-	DirectX::XMMATRIX temp = XMConverter(cube1World);
-	light.position.x = temp.r[3].m128_f32[0];
-	light.position.y = temp.r[3].m128_f32[1] + 8.0f;
-	light.position.z = temp.r[3].m128_f32[2];
-#pragma endregion
-
 #pragma region Define Worlds
 	modelWorld = RotateZ(modelWorld, rot);
 	modelWorld = Translate(modelWorld, 0.0f, -0.8f, 15.0f);
-	modelWorld = Scale_4x4(modelWorld, 0.4f, 0.4f, 0.4f);
+	modelWorld = Scale_4x4(modelWorld, 0.004f, 0.004f, 0.004f);
 
 	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
 	cube1World = RotateZ(cube1World, rot);
@@ -662,6 +809,13 @@ bool GraphicsProject::Update() {
 
 	skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f);
 	skyboxWorld = Translate(skyboxWorld, -camPosition.x, -camPosition.y, -camPosition.z);
+#pragma endregion
+
+#pragma region Reset Light
+	DirectX::XMMATRIX temp = XMConverter(starWorld);
+	light.position.x = temp.r[3].m128_f32[0];
+	light.position.y = temp.r[3].m128_f32[1];
+	light.position.z = temp.r[3].m128_f32[2];
 #pragma endregion
 
 	return Render();
@@ -721,6 +875,30 @@ bool GraphicsProject::Render(){
 	//devContext->DrawIndexed(FindNumIndicies(iBuffer_Skybox), 0, 0);
 
 	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1, 0);
+#pragma endregion
+
+#pragma region Draw Star
+	stride = sizeof(SIMPLE_VERTEX);
+
+	WVP = Mult_4x4(starWorld, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (starWorld);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, NULL, NULL, &cbPerObj, NULL, NULL);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vBuffer_Star, &stride, &offset);
+	devContext->IASetIndexBuffer(iBuffer_Star, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(starLayout);
+	devContext->VSSetShader(vShader_Star, NULL, NULL);
+	devContext->PSSetShader(pShader_Star, NULL, NULL);
+
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->RSSetState(rState_Wire);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_Star), 0, 0);
 #pragma endregion
 
 #pragma region Draw Ground
@@ -869,6 +1047,7 @@ bool GraphicsProject::Render(){
 	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
 #pragma endregion
 
+
 	swapChain->Present(0, 0);
 	return true;
 }
@@ -964,7 +1143,7 @@ void GraphicsProject::ResizeWin() {
 	devContext->OMSetRenderTargets(1, &rtView, dsView);
 
 	// Set new proj matrix
-	float ar = abs((float)width / (float)height);
+	float ar = abs(width / height);
 	camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, ar);
 
 	//	Change view port
@@ -1007,11 +1186,6 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 
 	DIKeyboard->GetDeviceState(sizeof(keyboardState), (LPVOID)&keyboardState);
 
-	if (keyboardState[DIK_ESCAPE] & 0x80){
-		PostMessage(pApp->window, WM_DESTROY, 0, 0);
-	}
-
-#pragma region Camera&Object Movement
 	//	Movement amount per frame
 	float negMove = -(5.0f * (float)time);
 	float posMove = 5.0f * (float)time;
@@ -1019,7 +1193,11 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	float negRotate = -(5.0f * (float)time);
 	float posRotate = 5.0f * (float)time;
 
-	//	cam Movement
+	if (keyboardState[DIK_ESCAPE] & 0x80){
+		PostMessage(pApp->window, WM_DESTROY, 0, 0);
+	}
+
+#pragma region Camera Movement
 	if (keyboardState[DIK_W] & 0x80)
 		camView = Translate(camView, 0.0f, 0.0f, negMove);
 
@@ -1032,48 +1210,46 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	if (keyboardState[DIK_D] & 0x80)
 		camView = Translate(camView, negMove, 0.0f, 0.0f);
 
-	//	cam Fly / Ground
+
 	if (keyboardState[DIK_F] & 0x80)
 		camView = Translate(camView, 0.0f, negMove, 0.0f);
 
 	if (keyboardState[DIK_G] & 0x80)
 		camView = Translate(camView, 0.0f, posMove, 0.0f);
 
-	//	cam Rotation
-	if (keyboardState[DIK_UPARROW] & 0x80){
+
+	if (keyboardState[DIK_UPARROW] & 0x80)
 		camView = RotateX(camView, negRotate);
-		skyboxWorld = RotateX(skyboxWorld, negRotate);
-	}
 
-	if (keyboardState[DIK_DOWNARROW] & 0x80){
+	if (keyboardState[DIK_DOWNARROW] & 0x80)
 		camView = RotateX(camView, posRotate);
-		skyboxWorld = RotateX(skyboxWorld, posRotate);
-	}
 
-	if (keyboardState[DIK_LEFTARROW] & 0x80){
+	if (keyboardState[DIK_LEFTARROW] & 0x80)
 		camView = RotateY(camView, negRotate);
-		skyboxWorld = RotateY(skyboxWorld, negRotate);
-	}
 
-	if (keyboardState[DIK_RIGHTARROW] & 0x80){
+	if (keyboardState[DIK_RIGHTARROW] & 0x80)
 		camView = RotateY(camView, posRotate);
-		skyboxWorld = RotateY(skyboxWorld, posRotate);
-	}
+#pragma endregion
 
-	if (keyboardState[DIK_M] & 0x80){
-		skyboxWorld = Identity();
-		skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f); // skybox EXPAND
-		skyboxWorld = Translate(skyboxWorld, 0.0f, -10.0f, 0.0f);
+#pragma region Star Movement
+	if (keyboardState[DIK_NUMPAD8] & 0x80)
+		starWorld = Translate(starWorld, 0.0f, 0.0f, posMove);
 
-		camPosition = FLOAT4(0.0f, 3.0f, -8.0f, 0.0f);
-		camTarget = FLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
-		camUp = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
+	if (keyboardState[DIK_NUMPAD2] & 0x80)
+		starWorld = Translate(starWorld, 0.0f, 0.0f, negMove);
 
-		camView = CreateViewMatrix(camPosition, camTarget, camUp);
+	if (keyboardState[DIK_NUMPAD4] & 0x80)
+		starWorld = Translate(starWorld, negMove, 0.0f, 0.0f);
 
-		float ar = abs(w / h);
-		camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, ar);
-	}
+	if (keyboardState[DIK_NUMPAD6] & 0x80)
+		starWorld = Translate(starWorld, posMove, 0.0f, 0.0f);
+
+
+	if (keyboardState[DIK_NUMPAD7] & 0x80)
+		starWorld = Translate(starWorld, 0.0f, negMove, 0.0f);
+
+	if (keyboardState[DIK_NUMPAD9] & 0x80)
+		starWorld = Translate(starWorld, 0.0f, posMove, 0.0f);
 #pragma endregion
 
 	return;
@@ -1209,6 +1385,8 @@ bool GraphicsProject::ShutDown() {
 	vBuffer_Ground->Release();
 	vBuffer_Skybox->Release();
 	iBuffer_Skybox->Release();
+	iBuffer_Star->Release();
+	vBuffer_Star->Release();
 
 	dsBuffer->Release();
 	dsView->Release();
@@ -1216,9 +1394,12 @@ bool GraphicsProject::ShutDown() {
 
 	vertLayout->Release();
 	skyboxLayout->Release();
+	starLayout->Release();
 
 	vShader->Release();
 	pShader->Release();
+	vShader_Star->Release();
+	pShader_Star->Release();
 	vShader_Skybox->Release();
 	pShader_Skybox->Release();
 
