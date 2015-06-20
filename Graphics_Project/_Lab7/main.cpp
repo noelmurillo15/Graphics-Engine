@@ -4,7 +4,6 @@
 #include "CPUClass.h"
 
 #include "Cube.h"
-
 #include "DDSTextureLoader.h"
 
 #include <ctime>
@@ -133,7 +132,7 @@ public:
 
 	bool InitScene();
 	bool Update();
-	void Render();
+	bool Render();
 	bool ShutDown();
 
 	void ResizeWin();
@@ -143,6 +142,7 @@ public:
 	bool InitDirectInput(HINSTANCE hInstance);
 
 	bool loadOBJ(const char* path);
+	UINT FindNumIndicies(ID3D11Buffer*);
 };
 
 GraphicsProject* pApp = nullptr;
@@ -490,7 +490,7 @@ bool GraphicsProject::InitScene(){
 	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[2];
 	arrSize = ARRAYSIZE(vLayout_skybox);
 	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 
 	result = device->CreateInputLayout(vLayout_skybox, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);
 #pragma endregion
@@ -556,6 +556,7 @@ bool GraphicsProject::InitScene(){
 
 #pragma region Blend State
 	D3D11_BLEND_DESC blendDesc;
+	ZeroMemory(&blendDesc, sizeof(D3D11_BLEND_DESC));
 	blendDesc.AlphaToCoverageEnable = TRUE;
 	blendDesc.IndependentBlendEnable = FALSE;
 	blendDesc.RenderTarget[0].BlendEnable = TRUE;
@@ -612,13 +613,13 @@ bool GraphicsProject::Update() {
 	lpwinname += std::to_string(cpuTracker.GetCpuPercentage());
 	lpwinname += " %";
 	pApp->ChangeTitleBar(lpwinname);
-#pragma endregion
 
 	rot += timeTracker.GetTime();
 	if (rot > 6.26f)
 		rot = 0.0f;		
+#pragma endregion
 
-		//	Reset 
+#pragma region Reset Worlds
 	WVP = Identity();
 	cbPerObj.World = WVP;
 	cube1World = Identity();
@@ -626,9 +627,18 @@ bool GraphicsProject::Update() {
 	cube3World = Identity();
 	cube4World = Identity();
 	modelWorld = Identity();
+	skyboxWorld = Identity();
 	groundWorld = Identity();
+#pragma endregion
 
-		//	Define
+#pragma region Reset Light
+	DirectX::XMMATRIX temp = XMConverter(cube1World);
+	light.position.x = temp.r[3].m128_f32[0];
+	light.position.y = temp.r[3].m128_f32[1] + 8.0f;
+	light.position.z = temp.r[3].m128_f32[2];
+#pragma endregion
+
+#pragma region Define Worlds
 	modelWorld = RotateZ(modelWorld, rot);
 	modelWorld = Translate(modelWorld, 0.0f, -0.8f, 15.0f);
 	modelWorld = Scale_4x4(modelWorld, 0.4f, 0.4f, 0.4f);
@@ -650,27 +660,20 @@ bool GraphicsProject::Update() {
 	groundWorld = Translate(groundWorld, 0.0f, 0.0f, 0.0f);
 	groundWorld = Scale_4x4(groundWorld, 20.0f, 1.0f, 20.0f);
 
-		//	Reset light
-	DirectX::XMVECTOR vec = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-	vec = DirectX::XMVector3TransformCoord(vec, XMConverter(cube1World));
+	skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f);
+	skyboxWorld = Translate(skyboxWorld, -camPosition.x, -camPosition.y, -camPosition.z);
+#pragma endregion
 
-	DirectX::XMMATRIX temp = XMConverter(cube1World);
-	light.position.x = temp.r[3].m128_f32[0];
-	light.position.y = temp.r[3].m128_f32[1] + 8.0f;
-	light.position.z = temp.r[3].m128_f32[2];
-
-	Render();
-
-	return true;
+	return Render();
 }
 
-void GraphicsProject::Render(){
+bool GraphicsProject::Render(){
 
 	UINT stride, offset;
 	HRESULT result;
 
 	//	Background Color
-	FLOAT RGBA[4]; RGBA[0] = 0; RGBA[1] = 0; RGBA[2] = 0; RGBA[3] = 1;
+	FLOAT RGBA[4]; RGBA[0] = 0; RGBA[1] = 0; RGBA[2] = 1; RGBA[3] = 1;
 
 	//	Blend Factor
 	float blendFactor[] = { 0.25f, 0.25f, 0.25f, 0.25f };
@@ -692,81 +695,92 @@ void GraphicsProject::Render(){
 	stride = sizeof(OBJ_VERT);
 	offset = 0;
 
-	WVP = Mult_4x4(skyboxWorld, camProjection);	//	dont mult with camView for infinite skybox
+	WVP = Mult_4x4(skyboxWorld, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (skyboxWorld);
 	cbPerObj.WVP = WVP;
 
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-	devContext->RSSetState(rState_F);
+
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Skybox, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Skybox, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(skyboxLayout);
 	devContext->VSSetShader(vShader_Skybox, NULL, 0);
 	devContext->PSSetShader(pShader_Skybox, NULL, 0);
-	devContext->IASetInputLayout(skyboxLayout);
+
 	devContext->OMSetBlendState(0, 0, 0xffffffff);
 	devContext->PSSetShaderResources(0, 1, &srvSkymap);
 	devContext->PSSetSamplers(0, 1, &ssSkybox);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	devContext->DrawIndexed(1692, 0, 0);
+
+	//devContext->RSSetState(rState_B);
+	//devContext->DrawIndexed(FindNumIndicies(iBuffer_Skybox), 0, 0);
+	//devContext->RSSetState(rState_F);
+	//devContext->DrawIndexed(FindNumIndicies(iBuffer_Skybox), 0, 0);
 
 	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1, 0);
 #pragma endregion
 
 #pragma region Draw Ground
+	stride = sizeof(VERTEX);
+
 	WVP = Mult_4x4(groundWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (groundWorld);
 	cbPerObj.WVP = WVP;
 
-	stride = sizeof(VERTEX);
-	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Ground, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Ground, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
 	devContext->VSSetShader(vShader, NULL, 0);
 	devContext->PSSetShader(pShader, NULL, 0);
-	devContext->IASetInputLayout(vertLayout);
-	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 	devContext->PSSetShaderResources(0, 1, &srvGround);
 	devContext->PSSetSamplers(0, 1, &ssSkybox);
-	devContext->DrawIndexed(6, 0, 0);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->RSSetState(rState_F);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_Ground), 0, 0);
 #pragma endregion
 
 #pragma region Draw Model
+	stride = sizeof(Vert);
+
 	WVP = Mult_4x4(modelWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (modelWorld);
 	cbPerObj.WVP = WVP;
 
-	stride = sizeof(Vert);
-	offset = 0;
-
-	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-	devContext->RSSetState(rState_B);
+
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Model, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Model, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
 	devContext->VSSetShader(vShader, NULL, 0);
 	devContext->PSSetShader(pShader, NULL, 0);
-	devContext->IASetInputLayout(vertLayout);
-	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	D3D11_BUFFER_DESC ibufferDesc;
-	iBuffer_Model->GetDesc(&ibufferDesc);
-	UINT numIndicies = ibufferDesc.ByteWidth / sizeof(UINT);
-	devContext->DrawIndexed(numIndicies, 0, 0);
+	devContext->RSSetState(rState_B);
+	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_Model), 0, 0);
 #pragma endregion
 
 #pragma region Draw Cube
+	stride = sizeof(VERTEX);	
+
 	WVP = Mult_4x4(cube1World, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (cube1World);
 	cbPerObj.WVP = WVP;
 
-	stride = sizeof(VERTEX);	
-	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);	
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
@@ -777,7 +791,7 @@ void GraphicsProject::Render(){
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	devContext->PSSetShaderResources(0, 1, &srvGrass);
 	devContext->PSSetSamplers(0, 1, &ssCube);
-	devContext->DrawIndexed(36, 0, 0);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
 #pragma endregion
 
 #pragma region Draw Cube2
@@ -786,23 +800,23 @@ void GraphicsProject::Render(){
 	cbPerObj.World = (cube2World);
 	cbPerObj.WVP = WVP;	
 
-	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-	devContext->RSSetState(rState_F);
-	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
+
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
 	devContext->VSSetShader(vShader, NULL, 0);
 	devContext->PSSetShader(pShader, NULL, 0);
-	devContext->IASetInputLayout(vertLayout);
-	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
 	devContext->PSSetShaderResources(0, 1, &srvGlass);
 	devContext->PSSetSamplers(0, 1, &ssCube);
-	devContext->DrawIndexed(36, 0, 0);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	devContext->RSSetState(rState_B);
-	devContext->DrawIndexed(36, 0, 0);
+	devContext->RSSetState(rState_F_AA);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
 #pragma endregion
 
 #pragma region Draw Cube3
@@ -811,23 +825,23 @@ void GraphicsProject::Render(){
 	cbPerObj.World = (cube3World);
 	cbPerObj.WVP = WVP;
 
-	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-	devContext->RSSetState(rState_F);
-	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
+
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
 	devContext->VSSetShader(vShader, NULL, 0);
 	devContext->PSSetShader(pShader, NULL, 0);
-	devContext->IASetInputLayout(vertLayout);
-	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
 	devContext->PSSetShaderResources(0, 1, &srvGlass);
 	devContext->PSSetSamplers(0, 1, &ssCube);
-	devContext->DrawIndexed(36, 0, 0);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	devContext->RSSetState(rState_B);
-	devContext->DrawIndexed(36, 0, 0);
+	devContext->RSSetState(rState_F_AA);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
 #pragma endregion
 
 #pragma region Draw Cube4
@@ -836,26 +850,27 @@ void GraphicsProject::Render(){
 	cbPerObj.World = (cube4World);
 	cbPerObj.WVP = WVP;
 
-	devContext->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-	devContext->RSSetState(rState_F_AA);
-	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
+
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
 	devContext->VSSetShader(vShader, NULL, 0);
 	devContext->PSSetShader(pShader, NULL, 0);
-	devContext->IASetInputLayout(vertLayout);
-	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
 	devContext->PSSetShaderResources(0, 1, &srvGlass);
 	devContext->PSSetSamplers(0, 1, &ssCube);
-	devContext->DrawIndexed(36, 0, 0);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	devContext->RSSetState(rState_B_AA);
-	devContext->DrawIndexed(36, 0, 0);
+	devContext->RSSetState(rState_F_AA);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
 #pragma endregion
 
 	swapChain->Present(0, 0);
+	return true;
 }
 
 void GraphicsProject::ChangeTitleBar(std::string _str){
@@ -1167,6 +1182,15 @@ bool GraphicsProject::loadOBJ(const char* path){
 	return true;
 }
 
+UINT GraphicsProject::FindNumIndicies(ID3D11Buffer* b){
+	D3D11_BUFFER_DESC ibufferDesc;
+	b->GetDesc(&ibufferDesc);
+
+	UINT numIndicies = ibufferDesc.ByteWidth / sizeof(UINT);
+
+	return numIndicies;
+}
+
 bool GraphicsProject::ShutDown() {
 
 	swapChain->Release();
@@ -1174,40 +1198,33 @@ bool GraphicsProject::ShutDown() {
 	devContext->Release();
 	rtView->Release();
 
-	vertLayout->Release();
-
 	cbPerObjectBuffer->Release();
 	cbPerFrameBuffer->Release();
 
 	iBuffer_Cube->Release();
 	vBuffer_Cube->Release();
-
 	vBuffer_Model->Release();
 	iBuffer_Model->Release();
-
 	iBuffer_Ground->Release();
 	vBuffer_Ground->Release();
-
-	ssCube->Release();
-
-	bsTransparency->Release();
+	vBuffer_Skybox->Release();
+	iBuffer_Skybox->Release();
 
 	dsBuffer->Release();
 	dsView->Release();
 	dsState->Release();
 
+	vertLayout->Release();
 	skyboxLayout->Release();
-
-	vBuffer_Skybox->Release();
-	iBuffer_Skybox->Release();
-
-	vShader_Skybox->Release();
-	pShader_Skybox->Release();
 
 	vShader->Release();
 	pShader->Release();
+	vShader_Skybox->Release();
+	pShader_Skybox->Release();
 
+	ssCube->Release();
 	ssSkybox->Release();
+	bsTransparency->Release();
 
 	srvGlass->Release();
 	srvGrass->Release();
@@ -1228,6 +1245,8 @@ bool GraphicsProject::ShutDown() {
 	UnregisterClass(L"DirectXApplication", application);
 	return true;
 }
+
+
 
 
 

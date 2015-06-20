@@ -1,27 +1,24 @@
 #pragma pack_matrix(row_major)
 
-struct INPUT_CUBE_VERTEX {
-	float3 coordinate : POSITION;
-	float3 uvs : TEXCOORD;
-};
+TextureCube SkyMap;
+SamplerState ObjSamplerState;
 
-struct OUTPUT_CUBE_VERTEX {
-	float4 posOut : SV_POSITION;
-	float2 uvOut : TEXCOORD;
-};
-
-cbuffer cbPerObject
-{
+cbuffer cbPerObject{
 	float4x4 WVP;
+	float4x4 World;
 };
 
+struct SKYBOX_OUTPUT{
+	float4 pos : SV_POSITION;
+	float3 tex : TEXCOORD;
+};
 
-OUTPUT_CUBE_VERTEX main(INPUT_CUBE_VERTEX fromVertexBuffer) {
-	OUTPUT_CUBE_VERTEX sendToRasterizer = (OUTPUT_CUBE_VERTEX)0;
-	sendToRasterizer.posOut = float4(fromVertexBuffer.coordinate, 1);	//	converts f3 to f4 and makes w = 1
+SKYBOX_OUTPUT main(float3 inPos : POSITION, float2 inTex : TEXCOORD/*, float3 inNorm : COLOR*/){
+	SKYBOX_OUTPUT output = (SKYBOX_OUTPUT)0;
 
-	sendToRasterizer.posOut = mul(sendToRasterizer.posOut, WVP);
+	output.pos = mul(float4(inPos, 1.0f), WVP).xyww;
 
-	sendToRasterizer.uvOut = float2(fromVertexBuffer.uvs.xy);	//	uvs
-	return sendToRasterizer;
+	output.tex = inPos;
+
+	return output;
 }
