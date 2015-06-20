@@ -8,6 +8,7 @@
 
 #include <ctime>
 #include <string>
+#include <thread>
 
 #include "VS.csh"
 #include "PS.csh"
@@ -25,6 +26,8 @@
 
 
 class GraphicsProject {
+
+public:
 
 	//	Application data
 	HINSTANCE				application;
@@ -59,8 +62,11 @@ class GraphicsProject {
 	ID3D11Buffer*			iBuffer_Ground = nullptr;
 	ID3D11Buffer*			vBuffer_Ground = nullptr;
 
-	ID3D11Buffer*			iBuffer_Model = nullptr;
-	ID3D11Buffer*			vBuffer_Model = nullptr;
+	ID3D11Buffer*			iBuffer_LinkModel = nullptr;
+	ID3D11Buffer*			vBuffer_LinkModel = nullptr;
+
+	ID3D11Buffer*			iBuffer_BarrelModel = nullptr;
+	ID3D11Buffer*			vBuffer_BarrelModel = nullptr;
 
 	ID3D11Buffer*			iBuffer_Star = nullptr;
 	ID3D11Buffer*			vBuffer_Star = nullptr;
@@ -96,6 +102,10 @@ class GraphicsProject {
 	ID3D11SamplerState*		ssSkybox = nullptr;
 	ID3D11InputLayout*		skyboxLayout = nullptr;
 
+	//	Models
+	Model*					linkModel = nullptr;
+	Model*					barrelModel = nullptr;
+
 	//	Input Data
 	IDirectInputDevice8*	DIKeyboard;
 	IDirectInputDevice8*	DIMouse;
@@ -112,7 +122,6 @@ class GraphicsProject {
 	cbPerObject		cbPerObj;
 	cbPerFrame		constbuffPerFrame;
 
-	Model			m_model;
 	Light			light;
 
 	MATRIX4X4		WVP;
@@ -122,7 +131,8 @@ class GraphicsProject {
 	MATRIX4X4		cube3World;
 	MATRIX4X4		cube4World;
 
-	MATRIX4X4		modelWorld;
+	MATRIX4X4		linkWorld;
+	MATRIX4X4		barrelWorld;
 	MATRIX4X4		skyboxWorld;
 	MATRIX4X4		groundWorld;
 	MATRIX4X4		starWorld;
@@ -151,16 +161,18 @@ public:
 	void DetectInput(double time, float w, float h);
 	bool InitDirectInput(HINSTANCE hInstance);
 
-	bool loadOBJ(const char* path);
+	
 	UINT FindNumIndicies(ID3D11Buffer*);
 };
 
 GraphicsProject* pApp = nullptr;
 
+bool loadOBJ(const char* path, ID3D11Device* d, Model* m);
+
 GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 
 	HRESULT result;
-
+	
 #pragma region App & Window
 	pApp = this;
 	application = hinst;
@@ -291,12 +303,20 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 
 	result = device->CreateDepthStencilState(&dsDesc, &dsState);
 #pragma endregion
-
+	
 }
 
 bool GraphicsProject::InitScene(){
 
 	HRESULT result;
+
+#pragma region Load Model
+	vector<thread> threads;
+	linkModel = new Model;
+	barrelModel = new Model;
+	threads.push_back(thread(loadOBJ, "Link.obj", pApp->device, linkModel));
+	threads.push_back(thread(loadOBJ, "Barrel.obj", pApp->device, barrelModel));
+#pragma endregion
 
 #pragma region Compile .fx Shaders
 	result = device->CreateVertexShader(VS, sizeof(VS), NULL, &vShader);
@@ -307,10 +327,6 @@ bool GraphicsProject::InitScene(){
 
 	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);
 	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);
-#pragma endregion
-
-#pragma region Load Model
-	loadOBJ("Barrel.obj");
 #pragma endregion
 
 #pragma region Cube Setup
@@ -746,6 +762,51 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateRasterizerState(&rasDesc, &rState_Wire);	//	back cull - Wireframe
 #pragma endregion
 
+#pragma region Create Model Resources
+		//	Wait for threads to finish and join em
+	for (int i = 0; i < threads.size(); ++i)
+		threads.at(i).join();
+
+	D3D11_BUFFER_DESC vbuffdesc;
+	D3D11_SUBRESOURCE_DATA vSubdata;
+	D3D11_BUFFER_DESC iBuffdesc;
+	D3D11_SUBRESOURCE_DATA iSubdata;
+
+	//	Link
+	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
+	vbuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
+	vbuffdesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vbuffdesc.ByteWidth = sizeof(Vert) * linkModel->interleaved.size();
+	ZeroMemory(&vSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
+	vSubdata.pSysMem = &linkModel->interleaved[0];
+	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vBuffer_LinkModel);
+
+	ZeroMemory(&iBuffdesc, sizeof(D3D11_BUFFER_DESC));
+	iBuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
+	iBuffdesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	iBuffdesc.ByteWidth = sizeof(unsigned int) * linkModel->out_Indicies.size();
+	ZeroMemory(&iSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
+	iSubdata.pSysMem = &(linkModel->out_Indicies[0]);
+	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_LinkModel);
+
+	//	Barrel
+	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
+	vbuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
+	vbuffdesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vbuffdesc.ByteWidth = sizeof(Vert) * barrelModel->interleaved.size();
+	ZeroMemory(&vSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
+	vSubdata.pSysMem = &barrelModel->interleaved[0];
+	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vBuffer_BarrelModel);
+
+	ZeroMemory(&iBuffdesc, sizeof(D3D11_BUFFER_DESC));
+	iBuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
+	iBuffdesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	iBuffdesc.ByteWidth = sizeof(unsigned int) * barrelModel->out_Indicies.size();
+	ZeroMemory(&iSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
+	iSubdata.pSysMem = &(barrelModel->out_Indicies[0]);
+	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_BarrelModel);
+#pragma endregion
+
 	return true;
 }
 
@@ -776,19 +837,23 @@ bool GraphicsProject::Update() {
 #pragma region Reset Worlds
 	WVP = Identity();
 	cbPerObj.World = WVP;	
+	linkWorld = Identity();
 	cube1World = Identity();
 	cube2World = Identity();
 	cube3World = Identity();
 	cube4World = Identity();
-	modelWorld = Identity();
 	skyboxWorld = Identity();
 	groundWorld = Identity();
+	barrelWorld = Identity();
 #pragma endregion
 
 #pragma region Define Worlds
-	modelWorld = RotateZ(modelWorld, rot);
-	modelWorld = Translate(modelWorld, 0.0f, -0.8f, 15.0f);
-	modelWorld = Scale_4x4(modelWorld, 0.004f, 0.004f, 0.004f);
+	linkWorld = RotateZ(linkWorld, rot);
+	linkWorld = Translate(linkWorld, 0.0f, -0.8f, 15.0f);
+	linkWorld = Scale_4x4(linkWorld, 0.4f, 0.4f, 0.4f);
+
+	barrelWorld = Translate(barrelWorld, 5.0f, -0.8f, 15.0f);
+	barrelWorld = Scale_4x4(barrelWorld, 0.004f, 0.004f, 0.004f);
 
 	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
 	cube1World = RotateZ(cube1World, rot);
@@ -927,19 +992,19 @@ bool GraphicsProject::Render(){
 	devContext->DrawIndexed(FindNumIndicies(iBuffer_Ground), 0, 0);
 #pragma endregion
 
-#pragma region Draw Model
+#pragma region Draw Link
 	stride = sizeof(Vert);
 
-	WVP = Mult_4x4(modelWorld, camView);
+	WVP = Mult_4x4(linkWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
-	cbPerObj.World = (modelWorld);
+	cbPerObj.World = (linkWorld);
 	cbPerObj.WVP = WVP;
 
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 
-	devContext->IASetVertexBuffers(0, 1, &vBuffer_Model, &stride, &offset);
-	devContext->IASetIndexBuffer(iBuffer_Model, DXGI_FORMAT_R32_UINT, 0);
+	devContext->IASetVertexBuffers(0, 1, &vBuffer_LinkModel, &stride, &offset);
+	devContext->IASetIndexBuffer(iBuffer_LinkModel, DXGI_FORMAT_R32_UINT, 0);
 
 	devContext->IASetInputLayout(vertLayout);
 	devContext->VSSetShader(vShader, NULL, 0);
@@ -948,7 +1013,31 @@ bool GraphicsProject::Render(){
 	devContext->RSSetState(rState_B);
 	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	
-	devContext->DrawIndexed(FindNumIndicies(iBuffer_Model), 0, 0);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_LinkModel), 0, 0);
+#pragma endregion
+
+#pragma region Draw Barrel
+	stride = sizeof(Vert);
+
+	WVP = Mult_4x4(barrelWorld, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (barrelWorld);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vBuffer_BarrelModel, &stride, &offset);
+	devContext->IASetIndexBuffer(iBuffer_BarrelModel, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
+	devContext->VSSetShader(vShader, NULL, 0);
+	devContext->PSSetShader(pShader, NULL, 0);
+
+	devContext->RSSetState(rState_B);
+	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_BarrelModel), 0, 0);
 #pragma endregion
 
 #pragma region Draw Cube
@@ -1255,7 +1344,117 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	return;
 }
 
-bool GraphicsProject::loadOBJ(const char* path){
+UINT GraphicsProject::FindNumIndicies(ID3D11Buffer* b){
+	D3D11_BUFFER_DESC ibufferDesc;
+	b->GetDesc(&ibufferDesc);
+
+	UINT numIndicies = ibufferDesc.ByteWidth / sizeof(UINT);
+
+	return numIndicies;
+}
+
+bool GraphicsProject::ShutDown() {
+
+	swapChain->Release();
+	device->Release();
+	devContext->Release();
+	rtView->Release();
+
+	cbPerObjectBuffer->Release();
+	cbPerFrameBuffer->Release();
+
+	iBuffer_Cube->Release();
+	vBuffer_Cube->Release();
+	vBuffer_LinkModel->Release();
+	iBuffer_LinkModel->Release();
+	vBuffer_BarrelModel->Release();
+	iBuffer_BarrelModel->Release();
+	iBuffer_Ground->Release();
+	vBuffer_Ground->Release();
+	vBuffer_Skybox->Release();
+	iBuffer_Skybox->Release();
+	iBuffer_Star->Release();
+	vBuffer_Star->Release();
+
+	dsBuffer->Release();
+	dsView->Release();
+	dsState->Release();
+
+	vertLayout->Release();
+	skyboxLayout->Release();
+	starLayout->Release();
+
+	vShader->Release();
+	pShader->Release();
+	vShader_Star->Release();
+	pShader_Star->Release();
+	vShader_Skybox->Release();
+	pShader_Skybox->Release();
+
+	ssCube->Release();
+	ssSkybox->Release();
+	bsTransparency->Release();
+
+	srvGlass->Release();
+	srvGrass->Release();
+	srvGround->Release();
+	srvSkymap->Release();
+
+	rState_B_AA->Release();
+	rState_B->Release();
+	rState_F_AA->Release();
+	rState_F->Release();
+	rState_Wire->Release();
+	
+	DIKeyboard->Release();
+	DIMouse->Release();
+
+	delete linkModel;
+	delete barrelModel;
+
+	pApp = nullptr;
+
+	UnregisterClass(L"DirectXApplication", application);
+	return true;
+}
+
+
+
+
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow);
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wparam, LPARAM lparam);
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int) {
+	srand(unsigned int(time(0)));
+	GraphicsProject myApp(hInstance, (WNDPROC)WndProc);
+	myApp.InitScene();
+	MSG msg; ZeroMemory(&msg, sizeof(msg));
+	while (msg.message != WM_QUIT && myApp.Update()) {
+		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+	}
+	myApp.ShutDown();
+	return 0;
+}
+
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+	if (GetAsyncKeyState(VK_ESCAPE))
+		message = WM_DESTROY;
+	switch (message) {
+	case (WM_DESTROY) : { PostQuitMessage(0); }
+	case (WM_SIZE) : {
+		if (pApp)
+			pApp->ResizeWin();
+		break;
+	}
+					 break;
+	}
+	return DefWindowProc(hWnd, message, wParam, lParam);
+}
+
+bool loadOBJ(const char* path, ID3D11Device* d, Model* m){
 
 	std::vector<unsigned int> posIndicies, uvIndicies, normIndicies;
 	std::vector<FLOAT3> tmp_Pos;
@@ -1319,146 +1518,9 @@ bool GraphicsProject::loadOBJ(const char* path){
 		temp.Uvs = tmp_Uvs[uvIndicies[i] - 1];
 		temp.Norms = tmp_Norms[normIndicies[i] - 1];
 
-		m_model.interleaved.push_back(temp);
-		m_model.out_Indicies.push_back(i);
+		m->interleaved.push_back(temp);
+		m->out_Indicies.push_back(i);
 	}
-
-#pragma region Create Resources
-	HRESULT result;
-
-	D3D11_BUFFER_DESC vbuffdesc;
-	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
-	vbuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
-	vbuffdesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	vbuffdesc.ByteWidth = sizeof(Vert) * m_model.interleaved.size();
-
-	D3D11_SUBRESOURCE_DATA vSubdata;
-	ZeroMemory(&vSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
-	vSubdata.pSysMem = &m_model.interleaved[0];
-
-	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vBuffer_Model);
-	if (result != S_OK)
-		return false;
-
-	D3D11_BUFFER_DESC iBuffdesc;
-	ZeroMemory(&iBuffdesc, sizeof(D3D11_BUFFER_DESC));
-	iBuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
-	iBuffdesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	iBuffdesc.ByteWidth = sizeof(unsigned int) * m_model.out_Indicies.size();
-
-	D3D11_SUBRESOURCE_DATA iSubdata;
-	ZeroMemory(&iSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
-	iSubdata.pSysMem = &m_model.out_Indicies[0];
-
-	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_Model);
-	if (result != S_OK)
-		return false;
-#pragma endregion
 
 	return true;
-}
-
-UINT GraphicsProject::FindNumIndicies(ID3D11Buffer* b){
-	D3D11_BUFFER_DESC ibufferDesc;
-	b->GetDesc(&ibufferDesc);
-
-	UINT numIndicies = ibufferDesc.ByteWidth / sizeof(UINT);
-
-	return numIndicies;
-}
-
-bool GraphicsProject::ShutDown() {
-
-	swapChain->Release();
-	device->Release();
-	devContext->Release();
-	rtView->Release();
-
-	cbPerObjectBuffer->Release();
-	cbPerFrameBuffer->Release();
-
-	iBuffer_Cube->Release();
-	vBuffer_Cube->Release();
-	vBuffer_Model->Release();
-	iBuffer_Model->Release();
-	iBuffer_Ground->Release();
-	vBuffer_Ground->Release();
-	vBuffer_Skybox->Release();
-	iBuffer_Skybox->Release();
-	iBuffer_Star->Release();
-	vBuffer_Star->Release();
-
-	dsBuffer->Release();
-	dsView->Release();
-	dsState->Release();
-
-	vertLayout->Release();
-	skyboxLayout->Release();
-	starLayout->Release();
-
-	vShader->Release();
-	pShader->Release();
-	vShader_Star->Release();
-	pShader_Star->Release();
-	vShader_Skybox->Release();
-	pShader_Skybox->Release();
-
-	ssCube->Release();
-	ssSkybox->Release();
-	bsTransparency->Release();
-
-	srvGlass->Release();
-	srvGrass->Release();
-	srvGround->Release();
-	srvSkymap->Release();
-
-	rState_B_AA->Release();
-	rState_B->Release();
-	rState_F_AA->Release();
-	rState_F->Release();
-	rState_Wire->Release();
-	
-	DIKeyboard->Release();
-	DIMouse->Release();
-
-	pApp = nullptr;
-
-	UnregisterClass(L"DirectXApplication", application);
-	return true;
-}
-
-
-
-
-
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow);
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wparam, LPARAM lparam);
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int) {
-	srand(unsigned int(time(0)));
-	GraphicsProject myApp(hInstance, (WNDPROC)WndProc);
-	myApp.InitScene();
-	MSG msg; ZeroMemory(&msg, sizeof(msg));
-	while (msg.message != WM_QUIT && myApp.Update()) {
-		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-	}
-	myApp.ShutDown();
-	return 0;
-}
-
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-	if (GetAsyncKeyState(VK_ESCAPE))
-		message = WM_DESTROY;
-	switch (message) {
-	case (WM_DESTROY) : { PostQuitMessage(0); }
-	case (WM_SIZE) : {
-		if (pApp)
-			pApp->ResizeWin();
-		break;
-	}
-					 break;
-	}
-	return DefWindowProc(hWnd, message, wParam, lParam);
 }
