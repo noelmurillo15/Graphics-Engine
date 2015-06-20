@@ -93,6 +93,7 @@ public:
 	ID3D11ShaderResourceView* srvGlass = nullptr;	
 	ID3D11ShaderResourceView* srvGrass = nullptr;
 	ID3D11ShaderResourceView* srvGround = nullptr;
+	ID3D11ShaderResourceView* srvWood = nullptr;
 
 	//	Cube
 	ID3D11SamplerState*		ssCube = nullptr;
@@ -310,10 +311,12 @@ bool GraphicsProject::InitScene(){
 
 	HRESULT result;
 
-#pragma region Load Model
+#pragma region Load Models
 	vector<thread> threads;
+
 	linkModel = new Model;
 	barrelModel = new Model;
+
 	threads.push_back(thread(loadOBJ, "Link.obj", pApp->device, linkModel));
 	threads.push_back(thread(loadOBJ, "Barrel.obj", pApp->device, barrelModel));
 #pragma endregion
@@ -696,6 +699,7 @@ bool GraphicsProject::InitScene(){
 	result = CreateDDSTextureFromFile(device, L"_grass.dds", NULL, &srvGrass, NULL);
 	result = CreateDDSTextureFromFile(device, L"_glass.dds", NULL, &srvGlass, NULL);
 	result = CreateDDSTextureFromFile(device, L"_ground.dds", NULL, &srvGround, NULL);
+	result = CreateDDSTextureFromFile(device, L"_wood.dds", NULL, &srvWood, NULL);
 #pragma endregion
 
 #pragma region SamplerState
@@ -1034,9 +1038,10 @@ bool GraphicsProject::Render(){
 	devContext->VSSetShader(vShader, NULL, 0);
 	devContext->PSSetShader(pShader, NULL, 0);
 
-	devContext->RSSetState(rState_B);
+	devContext->PSSetShaderResources(0, 1, &srvWood);
 	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+	devContext->RSSetState(rState_B);
 	devContext->DrawIndexed(FindNumIndicies(iBuffer_BarrelModel), 0, 0);
 #pragma endregion
 
@@ -1399,6 +1404,7 @@ bool GraphicsProject::ShutDown() {
 	srvGrass->Release();
 	srvGround->Release();
 	srvSkymap->Release();
+	srvWood->Release();
 
 	rState_B_AA->Release();
 	rState_B->Release();
