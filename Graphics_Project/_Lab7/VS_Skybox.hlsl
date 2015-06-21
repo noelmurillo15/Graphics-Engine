@@ -11,7 +11,7 @@ struct SKYBOX_OUTPUT{
 	float3 tex : TEXCOORD;
 };
 
-SKYBOX_OUTPUT main(float3 inPos : POSITION, float2 inTex : TEXCOORD/*, float3 inNorm : COLOR*/){
+SKYBOX_OUTPUT main(float3 inPos : POSITION){
 	SKYBOX_OUTPUT output = (SKYBOX_OUTPUT)0;
 
 	output.pos = mul(float4(inPos, 1.0f), WVP);

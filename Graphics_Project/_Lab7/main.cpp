@@ -525,8 +525,8 @@ bool GraphicsProject::InitScene(){
 	camView = Identity();
 	skyboxWorld = Identity();
 
-	camPosition = FLOAT4(0.0f, 0.0f, -8.0f, 0.0f);
-	camTarget = FLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+	camPosition = FLOAT4(0.0f, 2.0f, -8.0f, 0.0f);
+	camTarget = FLOAT4(0.0f, 2.0f, 0.0f, 0.0f);
 	camUp = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
 
 	camView = CreateViewMatrix(camPosition, camTarget, camUp);
@@ -555,10 +555,9 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateInputLayout(layout, arrSize, VS, sizeof(VS), &vertLayout);
 
 	//	VS_Skybox
-	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[2];
+	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[1];
 	arrSize = ARRAYSIZE(vLayout_skybox);
 	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	vLayout_skybox[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 
 	result = device->CreateInputLayout(vLayout_skybox, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);
 
@@ -867,7 +866,7 @@ bool GraphicsProject::Update() {
 	groundWorld = Scale_4x4(groundWorld, 20.0f, 1.0f, 20.0f);
 #pragma endregion
 
-#pragma region Reset Light	
+#pragma region ResetLight	
 	DirectX::XMMATRIX temp = XMConverter(starWorld);
 	light.position.x = temp.r[3].m128_f32[0];
 	light.position.y = temp.r[3].m128_f32[1];
@@ -886,7 +885,7 @@ bool GraphicsProject::Render(){
 	FLOAT RGBA[4]; RGBA[0] = 0; RGBA[1] = 0; RGBA[2] = 1; RGBA[3] = 1;
 
 	//	Blend Factor
-	float blendFactor[] = { 0.25f, 0.25f, 0.25f, 0.25f };
+	float blendFactor[] = { 0.45f, 0.45f, 0.45f, 1.0f };
 
 	//	Clear views
 	devContext->ClearRenderTargetView(rtView, RGBA);
