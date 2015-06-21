@@ -2,8 +2,6 @@
 #include "TimerClass.h"
 #include "FPSClass.h"
 #include "CPUClass.h"
-
-#include "Cube.h"
 #include "DDSTextureLoader.h"
 
 #include <ctime>
@@ -106,6 +104,7 @@ public:
 	//	Models
 	Model*					linkModel = nullptr;
 	Model*					barrelModel = nullptr;
+	Model*					skyboxModel = nullptr;
 
 	//	Input Data
 	IDirectInputDevice8*	DIKeyboard;
@@ -159,9 +158,8 @@ public:
 	void ResizeWin();
 	void ChangeTitleBar(std::string _str);
 
-	void DetectInput(double time, float w, float h);
 	bool InitDirectInput(HINSTANCE hInstance);
-
+	void DetectInput(double time, float w, float h);
 	
 	UINT FindNumIndicies(ID3D11Buffer*);
 };
@@ -276,13 +274,7 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	depthDesc.ArraySize = 1;
 	depthDesc.SampleDesc.Count = 1;
 
-		//	Skybox
-	D3D11_SUBRESOURCE_DATA stencilSubdata_skybox;
-	stencilSubdata_skybox.pSysMem = Cube_indicies;
-	stencilSubdata_skybox.SysMemPitch = sizeof(const unsigned int);
-	stencilSubdata_skybox.SysMemSlicePitch = sizeof(Cube_indicies);
-
-	result = device->CreateTexture2D(&depthDesc, &stencilSubdata_skybox, &dsBuffer);
+	result = device->CreateTexture2D(&depthDesc, NULL, &dsBuffer);
 	result = device->CreateDepthStencilView(dsBuffer, 0, &dsView);
 
 		//	DS State
@@ -316,8 +308,10 @@ bool GraphicsProject::InitScene(){
 
 	linkModel = new Model;
 	barrelModel = new Model;
+	skyboxModel = new Model;
 
 	threads.push_back(thread(loadOBJ, "Link.obj", pApp->device, linkModel));
+	threads.push_back(thread(loadOBJ, "Cube.obj", pApp->device, skyboxModel));
 	threads.push_back(thread(loadOBJ, "Barrel.obj", pApp->device, barrelModel));
 #pragma endregion
 
@@ -416,7 +410,7 @@ bool GraphicsProject::InitScene(){
 
 #pragma region Star Setup
 	starWorld = Identity();
-	starWorld = Translate(starWorld, 0.0f, 10.0f, 0.0f);
+	starWorld = Translate(starWorld, 0.0f, 6.0f, 0.0f);
 
 	SIMPLE_VERTEX Star[20];
 	unsigned int iStar[108];
@@ -527,23 +521,21 @@ bool GraphicsProject::InitScene(){
 	iStar[104] = 16;	iStar[107] = 6;
 #pragma endregion
 
-#pragma region Skybox Setup
-	skyboxWorld = Identity();
-	skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f); // skybox EXPAND
-	skyboxWorld = Translate(skyboxWorld, 0.0f, -10.0f, 0.0f);
-#pragma endregion
-
 #pragma region Cam Setup
-	camPosition = FLOAT4(0.0f, 3.0f, -8.0f, 0.0f);
+	camView = Identity();
+	skyboxWorld = Identity();
+
+	camPosition = FLOAT4(0.0f, 0.0f, -8.0f, 0.0f);
 	camTarget = FLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
 	camUp = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
 
 	camView = CreateViewMatrix(camPosition, camTarget, camUp);
+	skyboxWorld = Translate(skyboxWorld, camPosition.x, camPosition.y, camPosition.z);
 
 	unsigned int aspect = (float)BUFFER_WIDTH / BUFFER_HEIGHT;
 	camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, aspect);
 #pragma endregion
-
+	
 #pragma region Light Setup
 	light.direction = FLOAT3(0.0f, -1.0f, 0.0f);
 	light.ambientColor = FLOAT4(0.8f, 0.8f, 0.8f, 1.0f);
@@ -602,15 +594,6 @@ bool GraphicsProject::InitScene(){
 	iinitData.pSysMem = iGround;
 
 	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Ground);
-		//	Skybox
-	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
-	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
-	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	indexBufferDesc.ByteWidth = sizeof(unsigned int) * 1692;
-	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
-	iinitData.pSysMem = Cube_indicies;
-
-	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Skybox);
 
 	//	Star
 	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
@@ -636,16 +619,6 @@ bool GraphicsProject::InitScene(){
 	vertBufferData.pSysMem = Cube;
 
 	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Cube);
-
-	//	Skybox
-	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
-	vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
-	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	vertexBufferDesc.ByteWidth = sizeof(OBJ_VERT) * 776;
-	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
-	vertBufferData.pSysMem = &Cube_data;
-
-	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Skybox);
 
 	//	Ground
 	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
@@ -793,6 +766,23 @@ bool GraphicsProject::InitScene(){
 	iSubdata.pSysMem = &(linkModel->out_Indicies[0]);
 	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_LinkModel);
 
+	//	Cube
+	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
+	vbuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
+	vbuffdesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vbuffdesc.ByteWidth = sizeof(Vert) * skyboxModel->interleaved.size();
+	ZeroMemory(&vSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
+	vSubdata.pSysMem = &skyboxModel->interleaved[0];
+	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vBuffer_Skybox);
+
+	ZeroMemory(&iBuffdesc, sizeof(D3D11_BUFFER_DESC));
+	iBuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
+	iBuffdesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	iBuffdesc.ByteWidth = sizeof(unsigned int) * skyboxModel->out_Indicies.size();
+	ZeroMemory(&iSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
+	iSubdata.pSysMem = &(skyboxModel->out_Indicies[0]);
+	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_Skybox);
+
 	//	Barrel
 	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
 	vbuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
@@ -846,7 +836,6 @@ bool GraphicsProject::Update() {
 	cube2World = Identity();
 	cube3World = Identity();
 	cube4World = Identity();
-	skyboxWorld = Identity();
 	groundWorld = Identity();
 	barrelWorld = Identity();
 #pragma endregion
@@ -854,10 +843,11 @@ bool GraphicsProject::Update() {
 #pragma region Define Worlds
 	linkWorld = RotateZ(linkWorld, rot);
 	linkWorld = Translate(linkWorld, 0.0f, -0.8f, 15.0f);
-	linkWorld = Scale_4x4(linkWorld, 0.4f, 0.4f, 0.4f);
+	linkWorld = Scale_4x4(linkWorld, 0.25f, 0.25f, 0.25f);
 
+	barrelWorld = RotateZ(barrelWorld, -rot);
 	barrelWorld = Translate(barrelWorld, 5.0f, -0.8f, 15.0f);
-	barrelWorld = Scale_4x4(barrelWorld, 0.004f, 0.004f, 0.004f);
+	barrelWorld = Scale_4x4(barrelWorld, 0.0025f, 0.0025f, 0.0025f);
 
 	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
 	cube1World = RotateZ(cube1World, rot);
@@ -875,12 +865,9 @@ bool GraphicsProject::Update() {
 
 	groundWorld = Translate(groundWorld, 0.0f, 0.0f, 0.0f);
 	groundWorld = Scale_4x4(groundWorld, 20.0f, 1.0f, 20.0f);
-
-	skyboxWorld = Scale_4x4(skyboxWorld, 20.0f, 20.0f, 20.0f);
-	skyboxWorld = Translate(skyboxWorld, -camPosition.x, -camPosition.y, -camPosition.z);
 #pragma endregion
 
-#pragma region Reset Light
+#pragma region Reset Light	
 	DirectX::XMMATRIX temp = XMConverter(starWorld);
 	light.position.x = temp.r[3].m128_f32[0];
 	light.position.y = temp.r[3].m128_f32[1];
@@ -915,10 +902,9 @@ bool GraphicsProject::Render(){
 	devContext->PSSetConstantBuffers(0, 1, &cbPerFrameBuffer);
 
 #pragma region Draw Skybox
-	stride = sizeof(OBJ_VERT);
+	stride = sizeof(Vert);
 	offset = 0;
 
-	WVP = Mult_4x4(skyboxWorld, camView);
 	WVP = Mult_4x4(WVP, camProjection);
 	cbPerObj.World = (skyboxWorld);
 	cbPerObj.WVP = WVP;
@@ -938,10 +924,8 @@ bool GraphicsProject::Render(){
 	devContext->PSSetSamplers(0, 1, &ssSkybox);
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	//devContext->RSSetState(rState_B);
-	//devContext->DrawIndexed(FindNumIndicies(iBuffer_Skybox), 0, 0);
-	//devContext->RSSetState(rState_F);
-	//devContext->DrawIndexed(FindNumIndicies(iBuffer_Skybox), 0, 0);
+	devContext->RSSetState(rState_F);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_Skybox), 0, 0);
 
 	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1, 0);
 #pragma endregion
@@ -1041,7 +1025,9 @@ bool GraphicsProject::Render(){
 	devContext->PSSetShaderResources(0, 1, &srvWood);
 	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	devContext->RSSetState(rState_B);
+	devContext->RSSetState(rState_B_AA);
+	devContext->DrawIndexed(FindNumIndicies(iBuffer_BarrelModel), 0, 0);
+	devContext->RSSetState(rState_B_AA);
 	devContext->DrawIndexed(FindNumIndicies(iBuffer_BarrelModel), 0, 0);
 #pragma endregion
 
@@ -1209,11 +1195,6 @@ void GraphicsProject::ResizeWin() {
 	depthBufferdesc.CPUAccessFlags = 0;
 	depthBufferdesc.MiscFlags = 0;
 
-	D3D11_SUBRESOURCE_DATA stenilSubres;
-	stenilSubres.pSysMem = Cube_indicies;
-	stenilSubres.SysMemPitch = sizeof(const unsigned int);
-	stenilSubres.SysMemSlicePitch = sizeof(Cube_indicies);
-
 	D3D11_DEPTH_STENCIL_DESC dsDesc;
 	dsDesc.DepthEnable = true;
 	dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -1230,7 +1211,7 @@ void GraphicsProject::ResizeWin() {
 	dsDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
 	dsDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
 
-	hr = device->CreateTexture2D(&depthBufferdesc, &stenilSubres, &dsBuffer);	//	Depth Stencil
+	hr = device->CreateTexture2D(&depthBufferdesc, NULL, &dsBuffer);	//	Depth Stencil
 	hr = device->CreateDepthStencilState(&dsDesc, &dsState);	//	Stencil state
 	hr = device->CreateDepthStencilView(dsBuffer, 0, &dsView);	//	Stencil view
 
@@ -1294,16 +1275,16 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 #pragma region Camera Movement
 	if (keyboardState[DIK_W] & 0x80)
 		camView = Translate(camView, 0.0f, 0.0f, negMove);
-
+	
 	if (keyboardState[DIK_S] & 0x80)
 		camView = Translate(camView, 0.0f, 0.0f, posMove);
-
+	
 	if (keyboardState[DIK_A] & 0x80)
 		camView = Translate(camView, posMove, 0.0f, 0.0f);
 
 	if (keyboardState[DIK_D] & 0x80)
 		camView = Translate(camView, negMove, 0.0f, 0.0f);
-
+	
 
 	if (keyboardState[DIK_F] & 0x80)
 		camView = Translate(camView, 0.0f, negMove, 0.0f);
@@ -1417,6 +1398,7 @@ bool GraphicsProject::ShutDown() {
 
 	delete linkModel;
 	delete barrelModel;
+	delete skyboxModel;
 
 	pApp = nullptr;
 

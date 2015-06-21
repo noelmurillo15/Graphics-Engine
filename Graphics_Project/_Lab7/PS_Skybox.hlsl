@@ -1,6 +1,6 @@
 
-TextureCube SkyMap;
-SamplerState ObjSamplerState;
+TextureCube SkyMap : register(t0);
+SamplerState ObjSamplerState : register(s0);
 
 struct SKYBOX_INPUT{
 	float4 pos : SV_POSITION;

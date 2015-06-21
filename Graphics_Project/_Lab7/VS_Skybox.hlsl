@@ -1,7 +1,5 @@
 #pragma pack_matrix(row_major)
 
-TextureCube SkyMap;
-SamplerState ObjSamplerState;
 
 cbuffer cbPerObject{
 	float4x4 WVP;
@@ -16,7 +14,7 @@ struct SKYBOX_OUTPUT{
 SKYBOX_OUTPUT main(float3 inPos : POSITION, float2 inTex : TEXCOORD/*, float3 inNorm : COLOR*/){
 	SKYBOX_OUTPUT output = (SKYBOX_OUTPUT)0;
 
-	output.pos = mul(float4(inPos, 1.0f), WVP).xyww;
+	output.pos = mul(float4(inPos, 1.0f), WVP);
 
 	output.tex = inPos;
 
