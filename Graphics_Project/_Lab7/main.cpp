@@ -25,8 +25,6 @@
 
 class GraphicsProject {
 
-public:
-
 	//	Application data
 	HINSTANCE				application;
 	WNDPROC					appWndProc;
@@ -106,6 +104,33 @@ public:
 	Model*					barrelModel = nullptr;
 	Model*					skyboxModel = nullptr;
 
+	//	cBuffer Objs
+	cbPerObject		cbPerObj;
+	cbPerFrame		constbuffPerFrame;
+	Light			light;
+
+	//	Worlds
+	MATRIX4X4		WVP;
+	MATRIX4X4		cube1World;
+	MATRIX4X4		cube2World;
+	MATRIX4X4		cube3World;
+	MATRIX4X4		cube4World;
+	MATRIX4X4		linkWorld;
+	MATRIX4X4		barrelWorld;
+	MATRIX4X4		skyboxWorld;
+	MATRIX4X4		groundWorld;
+	MATRIX4X4		starWorld;
+
+	//	Camera
+	MATRIX4X4		camView;
+	MATRIX4X4		camProjection;
+
+	FLOAT4			camPosition;
+	FLOAT4			camTarget;
+	FLOAT4			camUp;
+
+	float			rot = 0.01f;
+
 	//	Input Data
 	IDirectInputDevice8*	DIKeyboard;
 	IDirectInputDevice8*	DIMouse;
@@ -117,33 +142,6 @@ public:
 	FPSClass				fpsTracker;
 	TimerClass				timeTracker;
 	CpuClass				cpuTracker;
-
-	//	Objects
-	cbPerObject		cbPerObj;
-	cbPerFrame		constbuffPerFrame;
-
-	Light			light;
-
-	MATRIX4X4		WVP;
-
-	MATRIX4X4		cube1World;
-	MATRIX4X4		cube2World;
-	MATRIX4X4		cube3World;
-	MATRIX4X4		cube4World;
-
-	MATRIX4X4		linkWorld;
-	MATRIX4X4		barrelWorld;
-	MATRIX4X4		skyboxWorld;
-	MATRIX4X4		groundWorld;
-	MATRIX4X4		starWorld;
-
-	MATRIX4X4		camView;
-	MATRIX4X4		camProjection;
-	FLOAT4			camPosition;
-	FLOAT4			camTarget;
-	FLOAT4			camUp;
-
-	float			rot = 0.01f;
 
 public:
 
@@ -164,9 +162,11 @@ public:
 	UINT FindNumIndicies(ID3D11Buffer*);
 };
 
+
 GraphicsProject* pApp = nullptr;
 
 bool loadOBJ(const char* path, ID3D11Device* d, Model* m);
+
 
 GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 
@@ -181,7 +181,7 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	ZeroMemory(&wndClass, sizeof(wndClass));
 	wndClass.cbSize = sizeof(WNDCLASSEX);
 	wndClass.lpfnWndProc = appWndProc;
-	wndClass.lpszClassName = L"DirectXApplication";
+	wndClass.lpszClassName = L"GraphicsProject";
 	wndClass.hInstance = application;
 	wndClass.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wndClass.hbrBackground = (HBRUSH)(COLOR_WINDOWFRAME);
@@ -190,7 +190,7 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	RECT window_size = { 0, 0, BUFFER_WIDTH, BUFFER_HEIGHT };
 	AdjustWindowRect(&window_size, WS_OVERLAPPEDWINDOW, false);
 
-	window = CreateWindow(L"DirectXApplication", L"Project", WS_OVERLAPPEDWINDOW,
+	window = CreateWindow(L"GraphicsProject", L"Project", WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, window_size.right - window_size.left, window_size.bottom - window_size.top,
 		NULL, NULL, application, this);
 
@@ -211,7 +211,6 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 
 #pragma region Device SwapChain
 	D3D_FEATURE_LEVEL features[3];
-
 	D3D_FEATURE_LEVEL pFeatureLevels;
 	features[0] = D3D_FEATURE_LEVEL_11_0;
 	features[1] = D3D_FEATURE_LEVEL_10_1;
@@ -261,8 +260,14 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	pBB->Release();
 #pragma endregion
 
-#pragma region DepthStencil
-		//	Cube
+#pragma region Viewport
+	ZeroMemory(&viewport, sizeof(D3D11_VIEWPORT));
+	viewport.Height = BUFFER_HEIGHT;
+	viewport.Width = BUFFER_WIDTH;
+	viewport.MaxDepth = 1.0f;
+#pragma endregion
+
+#pragma region Depth State & Buffer
 	D3D11_TEXTURE2D_DESC depthDesc;
 	ZeroMemory(&depthDesc, sizeof(D3D11_TEXTURE2D_DESC));
 	depthDesc.Width = BUFFER_WIDTH;
@@ -315,7 +320,15 @@ bool GraphicsProject::InitScene(){
 	threads.push_back(thread(loadOBJ, "Barrel.obj", pApp->device, barrelModel));
 #pragma endregion
 
-#pragma region Compile .fx Shaders
+#pragma region Load Textures
+	result = CreateDDSTextureFromFile(device, L"_skymap.dds", NULL, &srvSkymap, NULL);
+	result = CreateDDSTextureFromFile(device, L"_grass.dds", NULL, &srvGrass, NULL);
+	result = CreateDDSTextureFromFile(device, L"_glass.dds", NULL, &srvGlass, NULL);
+	result = CreateDDSTextureFromFile(device, L"_ground.dds", NULL, &srvGround, NULL);
+	result = CreateDDSTextureFromFile(device, L"_wood.dds", NULL, &srvWood, NULL);
+#pragma endregion
+
+#pragma region Create Shaders
 	result = device->CreateVertexShader(VS, sizeof(VS), NULL, &vShader);
 	result = device->CreatePixelShader(PS, sizeof(PS), NULL, &pShader);
 
@@ -571,21 +584,40 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateInputLayout(vLayout_Star, arrSize, VS_Star, sizeof(VS_Star), &starLayout);
 #pragma endregion
 
+#pragma region ConstBuffer
+	//	per object
+	D3D11_BUFFER_DESC cbbd;
+	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
+	cbbd.Usage = D3D11_USAGE_DEFAULT;
+	cbbd.ByteWidth = sizeof(cbPerObject);
+	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+	result = device->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
+
+	//	 per frame
+	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
+	cbbd.Usage = D3D11_USAGE_DEFAULT;
+	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cbbd.ByteWidth = sizeof(cbPerFrame);
+
+	result = device->CreateBuffer(&cbbd, NULL, &cbPerFrameBuffer);
+#pragma endregion
+
 #pragma region IndexBuffer
-		//	Cube
 	D3D11_BUFFER_DESC indexBufferDesc;
+	D3D11_SUBRESOURCE_DATA iinitData;
+
+	//	Cube
 	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	indexBufferDesc.ByteWidth = sizeof(UINT) * 12 * 3;
 	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-
-	D3D11_SUBRESOURCE_DATA iinitData;
 	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
 	iinitData.pSysMem = iCube;
 
 	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Cube);
 
-		//	Ground
+	//	Ground
 	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	indexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
 	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
@@ -607,14 +639,14 @@ bool GraphicsProject::InitScene(){
 #pragma endregion
 
 #pragma region VertexBuffer
-	//	Cubes
 	D3D11_BUFFER_DESC vertexBufferDesc;
+	D3D11_SUBRESOURCE_DATA vertBufferData;
+
+	//	Cube
 	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.ByteWidth = sizeof(VERTEX) * 24;
-
-	D3D11_SUBRESOURCE_DATA vertBufferData;
 	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
 	vertBufferData.pSysMem = Cube;
 
@@ -639,40 +671,6 @@ bool GraphicsProject::InitScene(){
 	vertBufferData.pSysMem = Star;
 
 	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Star);
-#pragma endregion
-
-#pragma region Viewport
-	ZeroMemory(&viewport, sizeof(D3D11_VIEWPORT));
-	viewport.Height = BUFFER_HEIGHT;
-	viewport.Width = BUFFER_WIDTH;
-	viewport.MaxDepth = 1.0f;
-#pragma endregion
-
-#pragma region ConstBuffer
-		//	per object
-	D3D11_BUFFER_DESC cbbd;
-	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
-	cbbd.Usage = D3D11_USAGE_DEFAULT;
-	cbbd.ByteWidth = sizeof(cbPerObject);
-	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-
-	result = device->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
-
-		//	 per frame
-	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
-	cbbd.Usage = D3D11_USAGE_DEFAULT;
-	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	cbbd.ByteWidth = sizeof(cbPerFrame);
-
-	result = device->CreateBuffer(&cbbd, NULL, &cbPerFrameBuffer);
-#pragma endregion
-
-#pragma region Load Textures
-	result = CreateDDSTextureFromFile(device, L"_skymap.dds", NULL, &srvSkymap, NULL);
-	result = CreateDDSTextureFromFile(device, L"_grass.dds", NULL, &srvGrass, NULL);
-	result = CreateDDSTextureFromFile(device, L"_glass.dds", NULL, &srvGlass, NULL);
-	result = CreateDDSTextureFromFile(device, L"_ground.dds", NULL, &srvGround, NULL);
-	result = CreateDDSTextureFromFile(device, L"_wood.dds", NULL, &srvWood, NULL);
 #pragma endregion
 
 #pragma region SamplerState
@@ -766,7 +764,7 @@ bool GraphicsProject::InitScene(){
 	iSubdata.pSysMem = &(linkModel->out_Indicies[0]);
 	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_LinkModel);
 
-	//	Cube
+	//	Skybox
 	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
 	vbuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
 	vbuffdesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
@@ -1125,7 +1123,6 @@ bool GraphicsProject::Render(){
 	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
 #pragma endregion
 
-
 	swapChain->Present(0, 0);
 	return true;
 }
@@ -1228,23 +1225,13 @@ bool GraphicsProject::InitDirectInput(HINSTANCE hInstance){
 
 	HRESULT result;
 
-	result = DirectInput8Create(hInstance,
-		DIRECTINPUT_VERSION,
-		IID_IDirectInput8,
-		(void**)&DirectInput,
-		NULL);
+	result = DirectInput8Create(hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&DirectInput, NULL);
 
-	result = DirectInput->CreateDevice(GUID_SysKeyboard,
-		&DIKeyboard,
-		NULL);
-
-	result = DirectInput->CreateDevice(GUID_SysMouse,
-		&DIMouse,
-		NULL);
-
+	result = DirectInput->CreateDevice(GUID_SysKeyboard, &DIKeyboard, NULL);
 	result = DIKeyboard->SetDataFormat(&c_dfDIKeyboard);
 	result = DIKeyboard->SetCooperativeLevel(pApp->window, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
 
+	result = DirectInput->CreateDevice(GUID_SysMouse, &DIMouse, NULL);
 	result = DIMouse->SetDataFormat(&c_dfDIMouse);
 	result = DIMouse->SetCooperativeLevel(pApp->window, DISCL_EXCLUSIVE | DISCL_NOWINKEY | DISCL_FOREGROUND);
 
@@ -1256,7 +1243,6 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	BYTE keyboardState[256];
 
 	DIKeyboard->Acquire();
-
 	DIKeyboard->GetDeviceState(sizeof(keyboardState), (LPVOID)&keyboardState);
 
 	//	Movement amount per frame
@@ -1400,7 +1386,7 @@ bool GraphicsProject::ShutDown() {
 
 	pApp = nullptr;
 
-	UnregisterClass(L"DirectXApplication", application);
+	UnregisterClass(L"GraphicsProject", application);
 	return true;
 }
 
