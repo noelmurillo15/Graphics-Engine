@@ -310,7 +310,7 @@ bool GraphicsProject::InitScene(){
 	barrelModel = new Model;
 	skyboxModel = new Model;
 
-	threads.push_back(thread(loadOBJ, "Link.obj", pApp->device, linkModel));
+	threads.push_back(thread(loadOBJ, "Tree.obj", pApp->device, linkModel));
 	threads.push_back(thread(loadOBJ, "Cube.obj", pApp->device, skyboxModel));
 	threads.push_back(thread(loadOBJ, "Barrel.obj", pApp->device, barrelModel));
 #pragma endregion
@@ -538,7 +538,7 @@ bool GraphicsProject::InitScene(){
 	
 #pragma region Light Setup
 	light.direction = FLOAT3(0.0f, -1.0f, 0.0f);
-	light.ambientColor = FLOAT4(0.8f, 0.8f, 0.8f, 1.0f);
+	light.ambientColor = FLOAT4(201 / 255.0f, 226 / 255.0f, 255 / 255.0f, 1.0f);
 
 	light.position = FLOAT3(0.0f, 0.0f, 0.0f);
 	light.range = 50.0f;
@@ -546,10 +546,11 @@ bool GraphicsProject::InitScene(){
 
 #pragma region InputLayer
 	//	VS
-	D3D11_INPUT_ELEMENT_DESC layout[3];
+	D3D11_INPUT_ELEMENT_DESC layout[4];
 	layout[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 	layout[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 	layout[2] = { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+	layout[3] = { "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 
 	UINT arrSize = ARRAYSIZE(layout);
 	result = device->CreateInputLayout(layout, arrSize, VS, sizeof(VS), &vertLayout);
@@ -864,9 +865,7 @@ bool GraphicsProject::Update() {
 
 	groundWorld = Translate(groundWorld, 0.0f, 0.0f, 0.0f);
 	groundWorld = Scale_4x4(groundWorld, 20.0f, 1.0f, 20.0f);
-#pragma endregion
 
-#pragma region ResetLight	
 	DirectX::XMMATRIX temp = XMConverter(starWorld);
 	light.position.x = temp.r[3].m128_f32[0];
 	light.position.y = temp.r[3].m128_f32[1];
