@@ -120,8 +120,6 @@ struct Light{
 struct cbPerObject{
 	MATRIX4X4 WVP;
 	MATRIX4X4 World;
-
-	//BOOL hasNormMap;
 };
 
 struct cbPerFrame{

@@ -1,6 +1,7 @@
 Texture2D ObjTexture;
 SamplerState ObjSamplerState;
 
+
 struct VS_INPUT {
 	float4 Pos : SV_POSITION;
 	float4 worldPos : TEXCOORD1;

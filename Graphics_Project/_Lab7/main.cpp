@@ -90,6 +90,7 @@ class GraphicsProject {
 	ID3D11ShaderResourceView* srvGrass = nullptr;
 	ID3D11ShaderResourceView* srvGround = nullptr;
 	ID3D11ShaderResourceView* srvWood = nullptr;
+	ID3D11ShaderResourceView* srvBark = nullptr;
 
 	//	Cube
 	ID3D11SamplerState*		ssCube = nullptr;
@@ -326,6 +327,7 @@ bool GraphicsProject::InitScene(){
 	result = CreateDDSTextureFromFile(device, L"_glass.dds", NULL, &srvGlass, NULL);
 	result = CreateDDSTextureFromFile(device, L"_ground.dds", NULL, &srvGround, NULL);
 	result = CreateDDSTextureFromFile(device, L"_wood.dds", NULL, &srvWood, NULL);
+	result = CreateDDSTextureFromFile(device, L"_bark.dds", NULL, &srvBark, NULL);
 #pragma endregion
 
 #pragma region Create Shaders
@@ -1370,6 +1372,7 @@ bool GraphicsProject::ShutDown() {
 	srvGround->Release();
 	srvSkymap->Release();
 	srvWood->Release();
+	srvBark->Release();
 
 	rState_B_AA->Release();
 	rState_B->Release();
