@@ -9,6 +9,8 @@ unsigned int Convert2D_1D(unsigned int x, unsigned int y, unsigned int width);
 
 FLOAT3 Mult_Vec3(FLOAT3, MATRIX3X3);
 
+FLOAT3 Subtract(FLOAT3 a, FLOAT3 b);
+
 FLOAT4 Mult_Vertex3x3(FLOAT4 ver, MATRIX3X3 mat);
 
 FLOAT4 Mult_Vertex4x4(FLOAT4 ver, MATRIX4X4 mat4);

@@ -12,6 +12,8 @@
 #include "PS.csh"
 #include "VS_Star.csh"
 #include "PS_Star.csh"
+#include "VS_Norm.csh"
+#include "PS_Norm.csh"
 #include "PS_Skybox.csh"
 #include "VS_Skybox.csh"
 
@@ -39,7 +41,9 @@ class GraphicsProject {
 	ID3D11RenderTargetView* rtView = nullptr;
 
 	ID3D11InputLayout*		vertLayout = nullptr;
+	ID3D11InputLayout*		skyboxLayout = nullptr;
 	ID3D11InputLayout*		starLayout = nullptr;
+	ID3D11InputLayout*		normMapLayout = nullptr;
 
 	ID3D11Texture2D*		dsBuffer = nullptr;
 	ID3D11DepthStencilView* dsView = nullptr;
@@ -76,6 +80,9 @@ class GraphicsProject {
 
 	ID3D11VertexShader*		vShader_Skybox = nullptr;
 	ID3D11PixelShader*		pShader_Skybox = nullptr;
+
+	ID3D11VertexShader*		vShader_NormMap = nullptr;
+	ID3D11PixelShader*		pShader_NormMap = nullptr;
 	
 	//	Raster States
 	ID3D11RasterizerState*	rState_B_AA = nullptr;
@@ -89,8 +96,9 @@ class GraphicsProject {
 	ID3D11ShaderResourceView* srvGlass = nullptr;	
 	ID3D11ShaderResourceView* srvGrass = nullptr;
 	ID3D11ShaderResourceView* srvGround = nullptr;
-	ID3D11ShaderResourceView* srvWood = nullptr;
+	ID3D11ShaderResourceView* srvBarrel = nullptr;
 	ID3D11ShaderResourceView* srvBark = nullptr;
+	ID3D11ShaderResourceView* srvBarrelN = nullptr;
 
 	//	Cube
 	ID3D11SamplerState*		ssCube = nullptr;
@@ -98,7 +106,7 @@ class GraphicsProject {
 	
 	//	Skybox
 	ID3D11SamplerState*		ssSkybox = nullptr;
-	ID3D11InputLayout*		skyboxLayout = nullptr;
+	
 
 	//	Models
 	Model*					linkModel = nullptr;
@@ -160,6 +168,7 @@ public:
 	bool InitDirectInput(HINSTANCE hInstance);
 	void DetectInput(double time, float w, float h);
 	
+	void ComputeTangents(Model*);
 	UINT FindNumIndicies(ID3D11Buffer*);
 };
 
@@ -316,7 +325,7 @@ bool GraphicsProject::InitScene(){
 	barrelModel = new Model;
 	skyboxModel = new Model;
 
-	threads.push_back(thread(loadOBJ, "Tree.obj", pApp->device, linkModel));
+	threads.push_back(thread(loadOBJ, "Link.obj", pApp->device, linkModel));
 	threads.push_back(thread(loadOBJ, "Cube.obj", pApp->device, skyboxModel));
 	threads.push_back(thread(loadOBJ, "Barrel.obj", pApp->device, barrelModel));
 #pragma endregion
@@ -326,7 +335,8 @@ bool GraphicsProject::InitScene(){
 	result = CreateDDSTextureFromFile(device, L"_grass.dds", NULL, &srvGrass, NULL);
 	result = CreateDDSTextureFromFile(device, L"_glass.dds", NULL, &srvGlass, NULL);
 	result = CreateDDSTextureFromFile(device, L"_ground.dds", NULL, &srvGround, NULL);
-	result = CreateDDSTextureFromFile(device, L"_wood.dds", NULL, &srvWood, NULL);
+	result = CreateDDSTextureFromFile(device, L"_barrel.dds", NULL, &srvBarrel, NULL);
+	result = CreateDDSTextureFromFile(device, L"_barrelN.dds", NULL, &srvBarrelN, NULL);
 	result = CreateDDSTextureFromFile(device, L"_bark.dds", NULL, &srvBark, NULL);
 #pragma endregion
 
@@ -337,8 +347,51 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateVertexShader(VS_Star, sizeof(VS_Star), NULL, &vShader_Star);
 	result = device->CreatePixelShader(PS_Star, sizeof(PS_Star), NULL, &pShader_Star);
 
+	result = device->CreateVertexShader(VS_Norm, sizeof(VS_Norm), NULL, &vShader_NormMap);
+	result = device->CreatePixelShader(PS_Norm, sizeof(PS_Norm), NULL, &pShader_NormMap);
+
 	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);
 	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);
+#pragma endregion
+
+#pragma region InputLayer
+	//	VS
+	D3D11_INPUT_ELEMENT_DESC layout[] = {
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+
+	UINT arrSize = ARRAYSIZE(layout);
+	result = device->CreateInputLayout(layout, arrSize, VS, sizeof(VS), &vertLayout);
+
+	//	VS_Skybox
+	D3D11_INPUT_ELEMENT_DESC layout_Sky[] = {
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+
+	arrSize = ARRAYSIZE(layout_Sky);
+	result = device->CreateInputLayout(layout_Sky, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);
+
+	//	VS_Star
+	D3D11_INPUT_ELEMENT_DESC layout_Star[] = {
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+
+	arrSize = ARRAYSIZE(layout_Star);
+	result = device->CreateInputLayout(layout_Star, arrSize, VS_Star, sizeof(VS_Star), &starLayout);
+
+	//	VS_NormMap
+	D3D11_INPUT_ELEMENT_DESC layout_N[] = {
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+
+	arrSize = ARRAYSIZE(layout_N);
+	result = device->CreateInputLayout(layout_N, arrSize, VS_Norm, sizeof(VS_Norm), &normMapLayout);
 #pragma endregion
 
 #pragma region Cube Setup
@@ -559,33 +612,6 @@ bool GraphicsProject::InitScene(){
 	light.range = 50.0f;
 #pragma endregion
 
-#pragma region InputLayer
-	//	VS
-	D3D11_INPUT_ELEMENT_DESC layout[4];
-	layout[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	layout[1] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	layout[2] = { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	layout[3] = { "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-
-	UINT arrSize = ARRAYSIZE(layout);
-	result = device->CreateInputLayout(layout, arrSize, VS, sizeof(VS), &vertLayout);
-
-	//	VS_Skybox
-	D3D11_INPUT_ELEMENT_DESC vLayout_skybox[1];
-	arrSize = ARRAYSIZE(vLayout_skybox);
-	vLayout_skybox[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-
-	result = device->CreateInputLayout(vLayout_skybox, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);
-
-	//	VS_Star
-	D3D11_INPUT_ELEMENT_DESC vLayout_Star[2];
-	arrSize = ARRAYSIZE(vLayout_Star);
-	vLayout_Star[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-	vLayout_Star[1] = { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-
-	result = device->CreateInputLayout(vLayout_Star, arrSize, VS_Star, sizeof(VS_Star), &starLayout);
-#pragma endregion
-
 #pragma region ConstBuffer
 	//	per object
 	D3D11_BUFFER_DESC cbbd;
@@ -784,6 +810,7 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_Skybox);
 
 	//	Barrel
+	ComputeTangents(barrelModel);
 	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
 	vbuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
 	vbuffdesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
@@ -1017,14 +1044,13 @@ bool GraphicsProject::Render(){
 	devContext->IASetIndexBuffer(iBuffer_BarrelModel, DXGI_FORMAT_R32_UINT, 0);
 
 	devContext->IASetInputLayout(vertLayout);
-	devContext->VSSetShader(vShader, NULL, 0);
-	devContext->PSSetShader(pShader, NULL, 0);
+	devContext->VSSetShader(vShader_NormMap, NULL, 0);
+	devContext->PSSetShader(pShader_NormMap, NULL, 0);
 
-	devContext->PSSetShaderResources(0, 1, &srvWood);
+	devContext->PSSetShaderResources(0, 1, &srvBarrel);
+	devContext->PSSetShaderResources(1, 1, &srvBarrelN);
 	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	devContext->RSSetState(rState_B_AA);
-	devContext->DrawIndexed(FindNumIndicies(iBuffer_BarrelModel), 0, 0);
 	devContext->RSSetState(rState_B_AA);
 	devContext->DrawIndexed(FindNumIndicies(iBuffer_BarrelModel), 0, 0);
 #pragma endregion
@@ -1316,6 +1342,43 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	return;
 }
 
+void GraphicsProject::ComputeTangents(Model* m){
+
+	for (unsigned int i = 0; i < m->interleaved.size(); i += 3){
+		Vert& v0 = m->interleaved[i];
+		Vert& v1 = m->interleaved[i + 1];
+		Vert& v2 = m->interleaved[i + 2];
+
+		FLOAT3 edge1 = Subtract(v1.Pos, v0.Pos);
+		FLOAT3 edge2 = Subtract(v2.Pos, v0.Pos);
+
+		float du1 = v1.Uvs.u - v0.Uvs.u;
+		float du2 = v1.Uvs.v - v0.Uvs.v;
+		float dv1 = v2.Uvs.u - v0.Uvs.u;
+		float dv2 = v2.Uvs.v - v0.Uvs.v;
+
+		float f = 1.0f / ((du2 * dv2) - (du2 * dv1));
+
+		FLOAT3 tan, biTan;
+
+		tan.x = f * (dv2 * edge1.x - dv1 * edge2.x);
+		tan.y = f * (dv2 * edge1.y - dv1 * edge2.y);
+		tan.z = f * (dv2 * edge1.z - dv1 * edge2.z);
+
+		biTan.x = f * (-du2 * edge1.x - du1 * edge2.x);
+		biTan.y = f * (-du2 * edge1.y - du1 * edge2.y);
+		biTan.z = f * (-du2 * edge1.z - du1 * edge2.z);
+
+		v0.tangent = tan;
+		v1.tangent = tan;
+		v2.tangent = tan;
+
+		v0.biTangent = biTan;
+		v1.biTangent = biTan;
+		v2.biTangent = biTan;
+	}
+}
+
 UINT GraphicsProject::FindNumIndicies(ID3D11Buffer* b){
 	D3D11_BUFFER_DESC ibufferDesc;
 	b->GetDesc(&ibufferDesc);
@@ -1355,11 +1418,14 @@ bool GraphicsProject::ShutDown() {
 	vertLayout->Release();
 	skyboxLayout->Release();
 	starLayout->Release();
+	normMapLayout->Release();
 
 	vShader->Release();
 	pShader->Release();
 	vShader_Star->Release();
 	pShader_Star->Release();
+	vShader_NormMap->Release();
+	pShader_NormMap->Release();
 	vShader_Skybox->Release();
 	pShader_Skybox->Release();
 
@@ -1370,8 +1436,9 @@ bool GraphicsProject::ShutDown() {
 	srvGlass->Release();
 	srvGrass->Release();
 	srvGround->Release();
+	srvBarrelN->Release();
 	srvSkymap->Release();
-	srvWood->Release();
+	srvBarrel->Release();
 	srvBark->Release();
 
 	rState_B_AA->Release();
@@ -1492,6 +1559,8 @@ bool loadOBJ(const char* path, ID3D11Device* d, Model* m){
 		temp.Pos = tmp_Pos[posIndicies[i] - 1];
 		temp.Uvs = tmp_Uvs[uvIndicies[i] - 1];
 		temp.Norms = tmp_Norms[normIndicies[i] - 1];
+		temp.tangent = FLOAT3(0.0f, 0.0f, 0.0f);
+		temp.biTangent = FLOAT3(0.0f, 0.0f, 0.0f);
 
 		m->interleaved.push_back(temp);
 		m->out_Indicies.push_back(i);

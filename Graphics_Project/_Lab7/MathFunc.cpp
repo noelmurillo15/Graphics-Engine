@@ -17,6 +17,14 @@ FLOAT3 Mult_Vec3(FLOAT3 v, MATRIX3X3 m){
 	return ans;
 }
 
+FLOAT3 Subtract(FLOAT3 a, FLOAT3 b){
+	FLOAT3 tmp;
+	tmp.x = a.x - b.x;
+	tmp.y = a.y - b.y;
+	tmp.z = a.z - b.z;
+	return tmp;
+}
+
 FLOAT4 Mult_Vertex3x3(FLOAT4 ver, MATRIX3X3 mat){
 	FLOAT4 answer;
 	answer.x = (ver.x * mat.a) + (ver.y * mat.i) + (ver.z * mat.x);

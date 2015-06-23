@@ -40,7 +40,7 @@ float4 main(VS_INPUT input) : SV_TARGET {
 	float3x3 texSpace = float3x3(input.tangent, biTan, input.Normal);
 	input.Normal = normalize(mul(normalMap, texSpace));
 
-	float3 n = input.Normal;
+	float3 n = normalize(input.Normal);
 
 	//	Point Light
 	float3 lightDir = normalize(light.position - input.worldPos);

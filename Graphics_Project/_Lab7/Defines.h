@@ -58,16 +58,16 @@ struct VERTEX{
 
 	FLOAT3 pos;
 	FLOAT2 texCoord;
-	FLOAT3 normal;
-
-	FLOAT3 tangent;
-	FLOAT3 biTangent;
+	FLOAT3 normal;	
 };
 
 struct Vert{
 	FLOAT3 Pos;
 	FLOAT2 Uvs;
 	FLOAT3 Norms;
+
+	FLOAT3 tangent;
+	FLOAT3 biTangent;
 };
 
 struct Model{
