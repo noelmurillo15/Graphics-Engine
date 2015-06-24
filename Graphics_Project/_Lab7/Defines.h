@@ -67,7 +67,6 @@ struct Vert{
 	FLOAT3 Norms;
 
 	FLOAT3 tangent;
-	FLOAT3 biTangent;
 };
 
 struct Model{

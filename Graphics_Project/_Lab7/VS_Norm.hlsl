@@ -1,34 +1,34 @@
 #pragma pack_matrix(row_major)
 
-Texture2D ObjTexture;
-Texture2D ObjNormMap;
-SamplerState ObjSamplerState;
-
 cbuffer cbPerObject {
 	float4x4 WVP;
 	float4x4 World;
 };
 
 struct VS_OUTPUT {
-	float4 Pos : SV_POSITION;
+	float4 pos : SV_POSITION;
 	float4 worldPos : TEXCOORD1;
-	float2 tex : TEXCOORD;
-	float3 Normal : COLOR;
+	float2 tex : TEXCOORD0;
+	float3 norm : COLOR;
 	float3 tangent : TANGENT;
+	float3 biTan : TEXCOORD2;
 };
 
 
-VS_OUTPUT main(float4 inPos : POSITION, float2 inTexCoord : TEXCOORD, float3 inNorm : COLOR, float3 tangent : TANGENT) {
-	VS_OUTPUT output;
+VS_OUTPUT main(float3 inPos : POSITION, float2 inTexCoord : TEXCOORD, float3 inNorm : COLOR, float3 inTan : TANGENT) {
+	VS_OUTPUT output = (VS_OUTPUT)0;
 
-	output.Pos = mul(inPos, WVP);
+	output.pos = mul(float4(inPos, 1.0f), WVP);
 
-	output.worldPos = mul(inPos, World);
+	output.worldPos = mul(float4(inPos, 1.0f), World);
 
-	output.Normal = mul(inNorm, World);
+	output.norm = mul(inNorm, World);
 
-	output.tangent = mul(tangent, World);
+	output.tangent = mul(inTan, World);
 
+	float3 bi = cross(inNorm, inTan);
+	output.biTan = mul(bi, World);
+	
 	output.tex = inTexCoord;
 
 	return output;

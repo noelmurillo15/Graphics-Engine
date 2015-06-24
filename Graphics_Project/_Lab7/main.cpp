@@ -47,6 +47,8 @@ class GraphicsProject {
 
 	ID3D11Texture2D*		dsBuffer = nullptr;
 	ID3D11DepthStencilView* dsView = nullptr;
+	ID3D11Texture2D*		dsBufferMap = nullptr;
+	ID3D11DepthStencilView* dsViewMap = nullptr;
 	ID3D11DepthStencilState*dsState = nullptr;
 
 	//	Buffers
@@ -100,13 +102,18 @@ class GraphicsProject {
 	ID3D11ShaderResourceView* srvBark = nullptr;
 	ID3D11ShaderResourceView* srvBarrelN = nullptr;
 
-	//	Cube
+	//	Samp & Blend States
 	ID3D11SamplerState*		ssCube = nullptr;
-	ID3D11BlendState*		bsTransparency = nullptr;
-	
-	//	Skybox
 	ID3D11SamplerState*		ssSkybox = nullptr;
-	
+	ID3D11BlendState*		bsTransparency = nullptr;
+
+	//	Minimap
+	ID3D11Texture2D*		rttMinimap = nullptr;
+	ID3D11RenderTargetView* rtvMinimap = nullptr;
+	ID3D11ShaderResourceView* srvMinimap = nullptr;
+
+	MATRIX4X4				mapView;
+	MATRIX4X4				mapProjection;
 
 	//	Models
 	Model*					linkModel = nullptr;
@@ -133,10 +140,6 @@ class GraphicsProject {
 	//	Camera
 	MATRIX4X4		camView;
 	MATRIX4X4		camProjection;
-
-	FLOAT4			camPosition;
-	FLOAT4			camTarget;
-	FLOAT4			camUp;
 
 	float			rot = 0.01f;
 
@@ -277,8 +280,45 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	viewport.MaxDepth = 1.0f;
 #pragma endregion
 
+#pragma region Minimap
+	D3D11_TEXTURE2D_DESC tDesc;
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+
+	ZeroMemory(&tDesc, sizeof(D3D11_TEXTURE2D_DESC));
+	tDesc.Width = BUFFER_WIDTH / 2;
+	tDesc.Height = BUFFER_HEIGHT / 2;
+	tDesc.MipLevels = 1;
+	tDesc.ArraySize = 1;
+	tDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	tDesc.SampleDesc.Count = 1;
+	tDesc.Usage = D3D11_USAGE_DEFAULT;
+	tDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	tDesc.CPUAccessFlags = 0;
+	tDesc.MiscFlags = 0;
+
+	result = device->CreateTexture2D(&tDesc, NULL, &rttMinimap);
+
+	ZeroMemory(&rtvDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
+	rtvDesc.Format = tDesc.Format;
+	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	rtvDesc.Texture2D.MipSlice = 0;
+
+	result = device->CreateRenderTargetView(rttMinimap, &rtvDesc, &rtvMinimap);
+
+	ZeroMemory(&srvDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
+	srvDesc.Format = tDesc.Format;
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.MipLevels = 1;
+
+	result = device->CreateShaderResourceView(rttMinimap, &srvDesc, &srvMinimap);
+#pragma endregion
+
 #pragma region Depth State & Buffer
 	D3D11_TEXTURE2D_DESC depthDesc;
+	D3D11_DEPTH_STENCIL_DESC dsDesc;
+
 	ZeroMemory(&depthDesc, sizeof(D3D11_TEXTURE2D_DESC));
 	depthDesc.Width = BUFFER_WIDTH;
 	depthDesc.Height = BUFFER_HEIGHT;
@@ -292,8 +332,22 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	result = device->CreateTexture2D(&depthDesc, NULL, &dsBuffer);
 	result = device->CreateDepthStencilView(dsBuffer, 0, &dsView);
 
+	//	Mini map
+	ZeroMemory(&depthDesc, sizeof(D3D11_TEXTURE2D_DESC));
+	depthDesc.Width = BUFFER_WIDTH / 2;
+	depthDesc.Height = BUFFER_HEIGHT / 2;
+	depthDesc.Usage = D3D11_USAGE_DEFAULT;
+	depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	depthDesc.Format = DXGI_FORMAT_D32_FLOAT;
+	depthDesc.MipLevels = 1;
+	depthDesc.ArraySize = 1;
+	depthDesc.SampleDesc.Count = 1;
+
+	result = device->CreateTexture2D(&depthDesc, NULL, &dsBufferMap);
+	result = device->CreateDepthStencilView(dsBufferMap, 0, &dsViewMap);
+
 		//	DS State
-	D3D11_DEPTH_STENCIL_DESC dsDesc;
+	ZeroMemory(&dsDesc, sizeof(D3D11_DEPTH_STENCIL_DESC));
 	dsDesc.DepthEnable = true;
 	dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
 	dsDesc.DepthFunc = D3D11_COMPARISON_LESS;
@@ -329,7 +383,7 @@ bool GraphicsProject::InitScene(){
 	threads.push_back(thread(loadOBJ, "Cube.obj", pApp->device, skyboxModel));
 	threads.push_back(thread(loadOBJ, "Barrel.obj", pApp->device, barrelModel));
 #pragma endregion
-
+	
 #pragma region Load Textures
 	result = CreateDDSTextureFromFile(device, L"_skymap.dds", NULL, &srvSkymap, NULL);
 	result = CreateDDSTextureFromFile(device, L"_grass.dds", NULL, &srvGrass, NULL);
@@ -590,18 +644,30 @@ bool GraphicsProject::InitScene(){
 #pragma endregion
 
 #pragma region Cam Setup
+	unsigned int aspect = (float)BUFFER_WIDTH / BUFFER_HEIGHT;
+
 	camView = Identity();
 	skyboxWorld = Identity();
 
-	camPosition = FLOAT4(0.0f, 2.0f, -8.0f, 0.0f);
-	camTarget = FLOAT4(0.0f, 2.0f, 0.0f, 0.0f);
-	camUp = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
+	FLOAT4 Position = FLOAT4(0.0f, 2.0f, -8.0f, 0.0f);
+	FLOAT4 Target = FLOAT4(0.0f, 2.0f, 0.0f, 0.0f);
+	FLOAT4 Up = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
 
-	camView = CreateViewMatrix(camPosition, camTarget, camUp);
-	skyboxWorld = Translate(skyboxWorld, camPosition.x, camPosition.y, camPosition.z);
-
-	unsigned int aspect = (float)BUFFER_WIDTH / BUFFER_HEIGHT;
+	camView = CreateViewMatrix(Position, Target, Up);
 	camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, aspect);
+
+	skyboxWorld = Translate(skyboxWorld, Position.x, Position.y, Position.z);
+
+	//	Minimap
+	Target = Position;
+	Position = FLOAT4(0.0f, 102.0f, -8.0f, 0.0f);
+	Up = FLOAT4(0.0f, 0.0f, 1.0f, 0.0f);
+
+	mapView = CreateViewMatrix(Position, Target, Up);
+
+	DirectX::XMMATRIX tmp = DirectX::XMMatrixOrthographicLH(512, 512, 1.0f, 500.0f);
+	MATRIX4X4 proj = XMConverter(tmp);
+	mapProjection = proj;
 #pragma endregion
 	
 #pragma region Light Setup
@@ -1043,9 +1109,9 @@ bool GraphicsProject::Render(){
 	devContext->IASetVertexBuffers(0, 1, &vBuffer_BarrelModel, &stride, &offset);
 	devContext->IASetIndexBuffer(iBuffer_BarrelModel, DXGI_FORMAT_R32_UINT, 0);
 
-	devContext->IASetInputLayout(vertLayout);
-	devContext->VSSetShader(vShader_NormMap, NULL, 0);
-	devContext->PSSetShader(pShader_NormMap, NULL, 0);
+	devContext->IASetInputLayout(normMapLayout);
+	devContext->VSSetShader(vShader_NormMap , NULL, 0);
+	devContext->PSSetShader(pShader_NormMap , NULL, 0);
 
 	devContext->PSSetShaderResources(0, 1, &srvBarrel);
 	devContext->PSSetShaderResources(1, 1, &srvBarrelN);
@@ -1150,6 +1216,48 @@ bool GraphicsProject::Render(){
 	devContext->RSSetState(rState_F_AA);
 	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
 #pragma endregion
+
+//#pragma region MiniMap
+//	//	set to map's rtview
+//	devContext->OMSetRenderTargets(1, &rtvMinimap, dsViewMap); 
+//	devContext->ClearRenderTargetView(rtvMinimap, RGBA);
+//
+//	//	draw ground again but from Maps perspective
+//	WVP = Mult_4x4(groundWorld, mapView);
+//	WVP = Mult_4x4(WVP, mapProjection);
+//	cbPerObj.World = (groundWorld);
+//	cbPerObj.WVP = WVP;
+//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+//
+//	devContext->RSSetState(rState_F);
+//	devContext->OMSetBlendState(0, 0, 0xffffffff);
+//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Ground), 0, 0);
+//
+//	//	set back to regular rtview
+//	devContext->OMSetRenderTargets(1, &rtView, dsView);
+//	devContext->PSSetShader(pShader, 0, 0);
+//
+//	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
+//	devContext->IAGetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
+//
+//	DirectX::XMMATRIX tmp = DirectX::XMMatrixScaling(0.5f, 0.5f, 0.0f) * DirectX::XMMatrixTranslation(0.5f, -0.5f, 0.0f);
+//	WVP = XMConverter(tmp);
+//	cbPerObj.WVP = WVP;
+//	cbPerObj.World = Identity();
+//
+//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+//
+//	devContext->PSSetShaderResources(0, 1, &srvMinimap);
+//	devContext->PSSetSamplers(0, 1, &ssCube);
+//
+//	devContext->RSSetState(rState_F);
+//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
+//
+//	ID3D11ShaderResourceView* srv = nullptr;
+//	devContext->PSSetShaderResources(0, 1, &srv);
+//
+//#pragma endregion
 
 	swapChain->Present(0, 0);
 	return true;
@@ -1359,23 +1467,15 @@ void GraphicsProject::ComputeTangents(Model* m){
 
 		float f = 1.0f / ((du2 * dv2) - (du2 * dv1));
 
-		FLOAT3 tan, biTan;
+		FLOAT3 tan;
 
 		tan.x = f * (dv2 * edge1.x - dv1 * edge2.x);
 		tan.y = f * (dv2 * edge1.y - dv1 * edge2.y);
 		tan.z = f * (dv2 * edge1.z - dv1 * edge2.z);
 
-		biTan.x = f * (-du2 * edge1.x - du1 * edge2.x);
-		biTan.y = f * (-du2 * edge1.y - du1 * edge2.y);
-		biTan.z = f * (-du2 * edge1.z - du1 * edge2.z);
-
 		v0.tangent = tan;
 		v1.tangent = tan;
 		v2.tangent = tan;
-
-		v0.biTangent = biTan;
-		v1.biTangent = biTan;
-		v2.biTangent = biTan;
 	}
 }
 
@@ -1413,6 +1513,8 @@ bool GraphicsProject::ShutDown() {
 
 	dsBuffer->Release();
 	dsView->Release();
+	dsBufferMap->Release();
+	dsViewMap->Release();
 	dsState->Release();
 
 	vertLayout->Release();
@@ -1433,12 +1535,16 @@ bool GraphicsProject::ShutDown() {
 	ssSkybox->Release();
 	bsTransparency->Release();
 
+	rttMinimap->Release();
+	rtvMinimap->Release();
+	srvMinimap->Release();
+
 	srvGlass->Release();
 	srvGrass->Release();
 	srvGround->Release();
 	srvBarrelN->Release();
-	srvSkymap->Release();
 	srvBarrel->Release();
+	srvSkymap->Release();
 	srvBark->Release();
 
 	rState_B_AA->Release();
@@ -1560,7 +1666,6 @@ bool loadOBJ(const char* path, ID3D11Device* d, Model* m){
 		temp.Uvs = tmp_Uvs[uvIndicies[i] - 1];
 		temp.Norms = tmp_Norms[normIndicies[i] - 1];
 		temp.tangent = FLOAT3(0.0f, 0.0f, 0.0f);
-		temp.biTangent = FLOAT3(0.0f, 0.0f, 0.0f);
 
 		m->interleaved.push_back(temp);
 		m->out_Indicies.push_back(i);
