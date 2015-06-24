@@ -6,6 +6,9 @@
 #pragma comment (lib, "d3d11.lib")
 using namespace std;
 
+#define NUMLEAVESPERTREE	500
+#define NUMTREES	100
+
 
 struct FLOAT2{
 	float u, v;
@@ -62,6 +65,13 @@ struct VERTEX{
 };
 
 struct Vert{
+
+	Vert(){}
+	Vert(float x, float y, float z,
+		float u, float v,
+		float nx, float ny, float nz,
+		float tx, float ty, float tz)
+		: Pos(x, y, z), Uvs(u, v), Norms(nx, ny, nz), tangent(tx, ty, tz){}
 	FLOAT3 Pos;
 	FLOAT2 Uvs;
 	FLOAT3 Norms;
@@ -115,14 +125,30 @@ struct Light{
 	FLOAT4 ambientColor;
 };
 
+struct InstanceData {
+	FLOAT3 pos;
+};
+
 	//	Constant buffer structs
 struct cbPerObject{
 	MATRIX4X4 WVP;
 	MATRIX4X4 World;
 };
 
+struct cbPerTree{
+	MATRIX4X4 WVP;
+	MATRIX4X4 World;
+
+	BOOL isLeaf;
+	FLOAT3 padding;
+};
+
 struct cbPerFrame{
 	Light light;
+};
+
+struct cbPerScene{
+	MATRIX4X4 leafOnTree[NUMLEAVESPERTREE];
 };
 
 #endif
