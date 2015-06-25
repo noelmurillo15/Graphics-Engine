@@ -1,6 +1,5 @@
 
 Texture2D ObjTexture;
-Texture2D ObjNormMap;
 SamplerState ObjSamplerState;
 
 struct Light{

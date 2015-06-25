@@ -108,7 +108,6 @@ class GraphicsProject {
 	ID3D11ShaderResourceView* srvBarrel = nullptr;
 	ID3D11ShaderResourceView* srvBarrelN = nullptr;	
 	ID3D11ShaderResourceView* srvBark = nullptr;
-	ID3D11ShaderResourceView* srvBarkN = nullptr;
 	ID3D11ShaderResourceView* srvLeaf = nullptr;
 
 	//	Samp & Blend States
@@ -122,21 +121,21 @@ class GraphicsProject {
 	ID3D11ShaderResourceView* srvMinimap = nullptr;
 
 	MATRIX4X4				mapView;
-	MATRIX4X4				mapProjection;
+	MATRIX4X4				mapProjection;	
 
-	//	Models
-	Model*					linkModel = nullptr;
-	Model*					barrelModel = nullptr;
-	Model*					skyboxModel = nullptr;
-	Model*					treeModel = nullptr;
-
-	//	cBuffer Objs
+	//	cBuffer structs
 	cbPerScene		cbPerInst;
 	cbPerFrame		constbuffPerFrame;	
 	cbPerTree		cbPerInstTree;
 	cbPerObject		cbPerObj;
 
 	Light			light;
+
+	//	Models
+	Model*			linkModel = nullptr;
+	Model*			barrelModel = nullptr;
+	Model*			skyboxModel = nullptr;
+	Model*			treeModel = nullptr;
 
 	//	Worlds
 	MATRIX4X4		WVP;
@@ -408,7 +407,6 @@ bool GraphicsProject::InitScene(){
 	result = CreateDDSTextureFromFile(device, L"_barrel.dds", NULL, &srvBarrel, NULL);
 	result = CreateDDSTextureFromFile(device, L"_barrelN.dds", NULL, &srvBarrelN, NULL);
 	result = CreateDDSTextureFromFile(device, L"_bark.dds", NULL, &srvBark, NULL);
-	result = CreateDDSTextureFromFile(device, L"_barkN.dds", NULL, &srvBarkN, NULL);
 	result = CreateDDSTextureFromFile(device, L"_leaf.dds", NULL, &srvLeaf, NULL);
 #pragma endregion
 
@@ -1262,7 +1260,7 @@ bool GraphicsProject::Render(){
 	devContext->DrawIndexed(FindNumIndicies(ibBarrel), 0, 0);
 #pragma endregion
 
-#pragma region Draw Instance
+#pragma region Draw Instance Trees
 	UINT strides[2] = { sizeof(Vert), sizeof(InstanceData) };
 	UINT offsets[2] = { 0, 0 };
 
@@ -1288,7 +1286,6 @@ bool GraphicsProject::Render(){
 		devContext->PSSetConstantBuffers(1, 1, &cbPerTreeBuffer);
 
 		devContext->PSSetShaderResources(0, 1, &srvBark);
-		devContext->PSSetShaderResources(1, 1, &srvBarkN);
 		devContext->PSSetSamplers(0, 1, &ssCube);
 
 		devContext->RSSetState(rState_None);
@@ -1669,59 +1666,58 @@ bool GraphicsProject::ShutDown() {
 	device->Release();
 	devContext->Release();
 	rtView->Release();
-
-	cbPerObjectBuffer->Release();
-	cbPerFrameBuffer->Release();
-
-	ibCube->Release();
-	vbCube->Release();
-	vbLink->Release();
-	ibLink->Release();
-	vbBarrel->Release();
-	ibBarrel->Release();
-	ibGround->Release();
-	vbGround->Release();
-	vbSkybox->Release();
-	ibSkybox->Release();
-	ibStar->Release();
-	vbStar->Release();
-
+	
+	vertLayout->Release();
+	skyboxLayout->Release();
+	starLayout->Release();
+	normMapLayout->Release();
+	instLayout->Release();
+	
+	
 	dsBuffer->Release();
 	dsView->Release();
 	dsBufferMap->Release();
 	dsViewMap->Release();
 	dsState->Release();
+	
 
-	vertLayout->Release();
-	skyboxLayout->Release();
-	starLayout->Release();
-	normMapLayout->Release();
-
+	cbPerObjectBuffer->Release();
+	cbPerFrameBuffer->Release();
+	cbPerInstanceBuffer->Release();
+	cbPerTreeBuffer->Release();
+	
+	vbSkybox->Release();
+	vbCube->Release();
+	vbGround->Release();
+	vbLink->Release();
+	vbBarrel->Release();
+	vbStar->Release();
+	vbTree->Release();
+	
+	ibSkybox->Release();
+	ibCube->Release();
+	ibGround->Release();
+	ibLink->Release();
+	ibBarrel->Release();
+	ibStar->Release();
+	ibTree->Release();
+	
+	treeInstanceBuff->Release();
+	
+	
 	vs->Release();
-	ps->Release();
 	vsStar->Release();
-	psStar->Release();
-	vsNorm->Release();
-	psNorm->Release();
 	vsSkybox->Release();
+	vsNorm->Release();
+	vsInst->Release();
+	
+	ps->Release();
+	psStar->Release();
 	psSkybox->Release();
-
-	ssCube->Release();
-	ssSkybox->Release();
-	bsTransparency->Release();
-
-	rttMinimap->Release();
-	rtvMinimap->Release();
-	srvMinimap->Release();
-
-	srvGlass->Release();
-	srvGrass->Release();
-	srvGround->Release();
-	srvBarrelN->Release();
-	srvBarrel->Release();
-	srvSkymap->Release();
-	srvBark->Release();
-
+	psNorm->Release();
+	psInst->Release();
+	
+	
 	rState_B_AA->Release();
 	rState_B->Release();
 	rState_F_AA->Release();
@@ -1729,24 +1725,28 @@ bool GraphicsProject::ShutDown() {
 	rState_Wire->Release();
 	rState_None->Release();
 	
+	
+	srvSkymap->Release();
+	srvGlass->Release();
+	srvGrass->Release();
+	srvGround->Release();
+	srvBarrel->Release();
+	srvBarrelN->Release();
+	srvBark->Release();
+	srvLeaf->Release();
+	
+	
+	ssCube->Release();
+	ssSkybox->Release();
+	bsTransparency->Release();
+	
+	
+	rttMinimap->Release();
+	rtvMinimap->Release();
+	srvMinimap->Release();
+	
 	DIKeyboard->Release();
 	DIMouse->Release();
-
-
-
-
-	cbPerInstanceBuffer->Release();
-	cbPerTreeBuffer->Release();
-	instLayout->Release();
-	treeInstanceBuff->Release();
-	vbTree->Release();
-	ibTree->Release();
-	vsInst->Release();
-	psInst->Release();
-	srvLeaf->Release();
-	srvBarkN->Release();
-
-
 
 
 	delete linkModel;
