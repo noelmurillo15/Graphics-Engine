@@ -6,7 +6,7 @@
 #pragma comment (lib, "d3d11.lib")
 using namespace std;
 
-#define NUMTREES	100
+#define NUMTREES	400
 
 
 struct FLOAT2{

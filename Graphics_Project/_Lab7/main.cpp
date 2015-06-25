@@ -106,7 +106,6 @@ class GraphicsProject {
 	ID3D11ShaderResourceView* srvBarrel = nullptr;
 	ID3D11ShaderResourceView* srvBarrelN = nullptr;	
 	ID3D11ShaderResourceView* srvBark = nullptr;
-	ID3D11ShaderResourceView* srvLeaf = nullptr;
 
 	//	Samp & Blend States
 	ID3D11SamplerState*		ssCube = nullptr;
@@ -164,6 +163,11 @@ class GraphicsProject {
 	TimerClass				timeTracker;
 	CpuClass				cpuTracker;
 
+	//	Frustum Culling
+	vector<FLOAT3> treeAABB;
+	int numTreesToDraw = 0;
+	std::vector<InstanceData> treeInstanceData;
+
 public:
 
 	GraphicsProject();
@@ -182,6 +186,9 @@ public:
 	
 	void ComputeTangents(Model*);
 	UINT FindNumIndicies(ID3D11Buffer*);
+
+	void cullAABB(std::vector<FLOAT4> &frustumPlanes);
+	std::vector<FLOAT4> getFrustumPlanes(MATRIX4X4& viewProj);
 };
 
 
@@ -387,7 +394,7 @@ bool GraphicsProject::InitScene(){
 	linkModel = new Model;
 	barrelModel = new Model;
 	skyboxModel = new Model;
-	treeModel = new Model;
+	treeModel = new Model;	
 
 	threads.push_back(thread(loadOBJ, "Link.obj", pApp->device, linkModel));
 	threads.push_back(thread(loadOBJ, "Cube.obj", pApp->device, skyboxModel));
@@ -403,7 +410,6 @@ bool GraphicsProject::InitScene(){
 	result = CreateDDSTextureFromFile(device, L"_barrel.dds", NULL, &srvBarrel, NULL);
 	result = CreateDDSTextureFromFile(device, L"_barrelN.dds", NULL, &srvBarrelN, NULL);
 	result = CreateDDSTextureFromFile(device, L"_bark.dds", NULL, &srvBark, NULL);
-	result = CreateDDSTextureFromFile(device, L"_leaf.dds", NULL, &srvLeaf, NULL);
 #pragma endregion
 
 #pragma region Create Shaders
@@ -685,6 +691,8 @@ bool GraphicsProject::InitScene(){
 		inst.push_back(iData);
 	}
 
+	treeInstanceData = inst;
+
 	D3D11_BUFFER_DESC instBuffDesc;
 	D3D11_SUBRESOURCE_DATA instData;
 
@@ -700,6 +708,10 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateBuffer(&instBuffDesc, &instData, &treeInstanceBuff);
 
 	treeWorld = Identity();
+
+	//	Frustum Culling
+	treeAABB.push_back(FLOAT3(-0.5f, -0.5f, -0.5f));
+	treeAABB.push_back(FLOAT3(0.5f, 0.5f, 0.5f));
 #pragma endregion
 
 #pragma region Cam Setup
@@ -984,7 +996,11 @@ bool GraphicsProject::Update() {
 	timeTracker.Frame();
 	cpuTracker.Frame();
 
+	//	Input
 	DetectInput(timeTracker.GetTime(), (float)BUFFER_WIDTH, (float)BUFFER_HEIGHT);
+
+	//	Frustum CUlling
+	cullAABB(getFrustumPlanes(Mult_4x4(camView, camProjection)));
 
 	std::string lpwinname;
 	lpwinname = "FPS : ";
@@ -994,6 +1010,8 @@ bool GraphicsProject::Update() {
 	lpwinname += ", CPU : ";
 	lpwinname += std::to_string(cpuTracker.GetCpuPercentage());
 	lpwinname += " %";
+	lpwinname += ", Num Trees Drawn : ";
+	lpwinname += std::to_string(numTreesToDraw);
 	pApp->ChangeTitleBar(lpwinname);
 
 	rot += timeTracker.GetTime();
@@ -1044,7 +1062,7 @@ bool GraphicsProject::Update() {
 	light.position.x = temp.r[3].m128_f32[0];
 	light.position.y = temp.r[3].m128_f32[1];
 	light.position.z = temp.r[3].m128_f32[2];
-#pragma endregion
+#pragma endregion	
 
 	return Render();
 }
@@ -1230,7 +1248,7 @@ bool GraphicsProject::Render(){
 		devContext->PSSetSamplers(0, 1, &ssCube);
 
 		devContext->RSSetState(rState_None);
-		devContext->DrawIndexedInstanced(FindNumIndicies(ibTree), NUMTREES, 0, 0, 0);
+		devContext->DrawIndexedInstanced(FindNumIndicies(ibTree), numTreesToDraw, 0, 0, 0);
 	}
 #pragma endregion
 
@@ -1563,6 +1581,105 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	return;
 }
 
+void GraphicsProject::cullAABB(std::vector<FLOAT4> &frustumPlanes) {
+	numTreesToDraw = 0;
+
+	std::vector<InstanceData> tempTreeInstDat(NUMTREES);
+	bool cull = false;
+
+	for (int i = 0; i < NUMTREES; ++i) {
+		cull = false;
+
+		for (int planeID = 0; planeID < 6; ++planeID) {
+			DirectX::XMVECTOR planeNormal = DirectX::XMVectorSet(frustumPlanes[planeID].x, frustumPlanes[planeID].y, frustumPlanes[planeID].z, 0.0f);
+			DirectX::XMFLOAT3 axisVert;
+
+			float planeConstant = frustumPlanes[planeID].w;
+
+			//	Bounds checking - x-axis
+			if (frustumPlanes[planeID].x < 0.0f)	
+				axisVert.x = treeAABB[0].x + treeInstanceData[i].pos.x;
+			else
+				axisVert.x = treeAABB[1].x + treeInstanceData[i].pos.x;
+
+			// y-axis
+			if (frustumPlanes[planeID].y < 0.0f)	
+				axisVert.y = treeAABB[0].y + treeInstanceData[i].pos.y;
+			else
+				axisVert.y = treeAABB[1].y + treeInstanceData[i].pos.y;
+
+			// z-axis
+			if (frustumPlanes[planeID].z < 0.0f)	
+				axisVert.z = treeAABB[0].z + treeInstanceData[i].pos.z;
+			else
+				axisVert.z = treeAABB[1].z + treeInstanceData[i].pos.z;
+
+			if (DirectX::XMVectorGetX(DirectX::XMVector3Dot(planeNormal, XMLoadFloat3(&axisVert))) + planeConstant < 0.0f) {
+				cull = true;
+				break;
+			}
+		}
+
+		if (!cull) {
+			tempTreeInstDat[numTreesToDraw].pos = treeInstanceData[i].pos;
+			numTreesToDraw++;
+		}
+	}
+	devContext->UpdateSubresource(treeInstanceBuff, 0, NULL, &tempTreeInstDat[0], 0, 0);
+}
+
+std::vector<FLOAT4> GraphicsProject::getFrustumPlanes(MATRIX4X4& viewProj){
+
+	std::vector<FLOAT4> fPlane(6);
+
+	// Left Frustum Plane
+	fPlane[0].x = viewProj.d + viewProj.a;
+	fPlane[0].y = viewProj.h + viewProj.e;
+	fPlane[0].z = viewProj.l + viewProj.i;
+	fPlane[0].w = viewProj.p + viewProj.m;
+
+	// Right Frustum Plane
+	fPlane[1].x = viewProj.d - viewProj.a;
+	fPlane[1].y = viewProj.h - viewProj.e;
+	fPlane[1].z = viewProj.l - viewProj.i;
+	fPlane[1].w = viewProj.p - viewProj.m;
+
+	// Top Frustum Plane 
+	fPlane[2].x = viewProj.d - viewProj.b;
+	fPlane[2].y = viewProj.h - viewProj.f;
+	fPlane[2].z = viewProj.l - viewProj.j;
+	fPlane[2].w = viewProj.p - viewProj.n;
+
+	// Bottom Frustum Plane
+	fPlane[3].x = viewProj.d + viewProj.b;
+	fPlane[3].y = viewProj.h + viewProj.f;
+	fPlane[3].z = viewProj.l + viewProj.j;
+	fPlane[3].w = viewProj.p + viewProj.n;
+
+	// Near Frustum Plane
+	fPlane[4].x = viewProj.c;
+	fPlane[4].y = viewProj.g;
+	fPlane[4].z = viewProj.k;
+	fPlane[4].w = viewProj.o;
+
+	// Far Frustum Plane
+	fPlane[5].x = viewProj.d - viewProj.c;
+	fPlane[5].y = viewProj.h - viewProj.g;
+	fPlane[5].z = viewProj.l - viewProj.k;
+	fPlane[5].w = viewProj.p - viewProj.o;
+
+	//	Normalize 
+	for (int i = 0; i < 6; ++i) {
+		float length = sqrt((fPlane[i].x * fPlane[i].x) + (fPlane[i].y * fPlane[i].y) + (fPlane[i].z * fPlane[i].z));
+		fPlane[i].x /= length;
+		fPlane[i].y /= length;
+		fPlane[i].z /= length;
+		fPlane[i].w /= length;
+	}
+
+	return fPlane;
+}
+
 void GraphicsProject::ComputeTangents(Model* m){
 
 	for (unsigned int i = 0; i < m->interleaved.size(); i += 3){
@@ -1671,9 +1788,7 @@ bool GraphicsProject::ShutDown() {
 	srvGround->Release();
 	srvBarrel->Release();
 	srvBarrelN->Release();
-	srvBark->Release();
-	srvLeaf->Release();
-	
+	srvBark->Release();	
 	
 	ssCube->Release();
 	ssSkybox->Release();
