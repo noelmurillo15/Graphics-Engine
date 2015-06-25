@@ -48,7 +48,6 @@ class GraphicsProject {
 	ID3D11InputLayout*		normMapLayout = nullptr;
 	ID3D11InputLayout*		instLayout = nullptr;
 	
-
 	ID3D11Texture2D*		dsBuffer = nullptr;
 	ID3D11DepthStencilView* dsView = nullptr;
 	ID3D11Texture2D*		dsBufferMap = nullptr;
@@ -117,8 +116,10 @@ class GraphicsProject {
 	ID3D11RenderTargetView* rtvMinimap = nullptr;
 	ID3D11ShaderResourceView* srvMinimap = nullptr;
 
-	MATRIX4X4				mapView;
-	MATRIX4X4				mapProjection;	
+	//	Frustum Culling
+	vector<FLOAT3> treeAABB;
+	int numTreesToDraw = 0;
+	vector<InstanceData> treeInstData;
 
 	//	cBuffer structs
 	cbPerFrame		constbuffPerFrame;	
@@ -149,6 +150,9 @@ class GraphicsProject {
 	MATRIX4X4		camView;
 	MATRIX4X4		camProjection;
 
+	MATRIX4X4		mapView;
+	MATRIX4X4		mapProjection;
+
 	float			rot = 0.01f;
 
 	//	Input Data
@@ -162,11 +166,6 @@ class GraphicsProject {
 	FPSClass				fpsTracker;
 	TimerClass				timeTracker;
 	CpuClass				cpuTracker;
-
-	//	Frustum Culling
-	vector<FLOAT3> treeAABB;
-	int numTreesToDraw = 0;
-	std::vector<InstanceData> treeInstanceData;
 
 public:
 
@@ -312,22 +311,19 @@ GraphicsProject::GraphicsProject(HINSTANCE hinst, WNDPROC proc){
 	tDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 	tDesc.CPUAccessFlags = 0;
 	tDesc.MiscFlags = 0;
-
 	result = device->CreateTexture2D(&tDesc, NULL, &rttMinimap);
 
 	ZeroMemory(&rtvDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
-	rtvDesc.Format = tDesc.Format;
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	rtvDesc.Texture2D.MipSlice = 0;
-
+	rtvDesc.Format = tDesc.Format;
 	result = device->CreateRenderTargetView(rttMinimap, &rtvDesc, &rtvMinimap);
 
 	ZeroMemory(&srvDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
-	srvDesc.Format = tDesc.Format;
 	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MostDetailedMip = 0;
 	srvDesc.Texture2D.MipLevels = 1;
-
+	srvDesc.Format = tDesc.Format;
 	result = device->CreateShaderResourceView(rttMinimap, &srvDesc, &srvMinimap);
 #pragma endregion
 
@@ -691,7 +687,7 @@ bool GraphicsProject::InitScene(){
 		inst.push_back(iData);
 	}
 
-	treeInstanceData = inst;
+	treeInstData = inst;
 
 	D3D11_BUFFER_DESC instBuffDesc;
 	D3D11_SUBRESOURCE_DATA instData;
@@ -717,12 +713,12 @@ bool GraphicsProject::InitScene(){
 #pragma region Cam Setup
 	unsigned int aspect = (float)BUFFER_WIDTH / BUFFER_HEIGHT;
 
-	camView = Identity();
-	skyboxWorld = Identity();
-
 	FLOAT4 Position = FLOAT4(0.0f, 2.0f, -8.0f, 0.0f);
 	FLOAT4 Target = FLOAT4(0.0f, 2.0f, 0.0f, 0.0f);
 	FLOAT4 Up = FLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
+
+	camView = Identity();
+	skyboxWorld = Identity();
 
 	camView = CreateViewMatrix(Position, Target, Up);
 	camProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, aspect);
@@ -731,14 +727,11 @@ bool GraphicsProject::InitScene(){
 
 	//	Minimap
 	Target = Position;
-	Position = FLOAT4(0.0f, 102.0f, -8.0f, 0.0f);
+	Position = FLOAT4(0.0f, 30.0f, -8.0f, 0.0f);
 	Up = FLOAT4(0.0f, 0.0f, 1.0f, 0.0f);
 
 	mapView = CreateViewMatrix(Position, Target, Up);
-
-	DirectX::XMMATRIX tmp = DirectX::XMMatrixOrthographicLH(512, 512, 1.0f, 500.0f);
-	MATRIX4X4 proj = XMConverter(tmp);
-	mapProjection = proj;
+	mapProjection = CreateProjectionMatrix(100.0f, 0.1f, 72, aspect);
 #pragma endregion
 	
 #pragma region Light Setup
@@ -746,7 +739,7 @@ bool GraphicsProject::InitScene(){
 	light.ambientColor = FLOAT4(201 / 255.0f, 226 / 255.0f, 255 / 255.0f, 1.0f);
 
 	light.position = FLOAT3(0.0f, 0.0f, 0.0f);
-	light.range = 50.0f;
+	light.range = 100.0f;
 #pragma endregion
 
 #pragma region ConstBuffer
@@ -999,7 +992,7 @@ bool GraphicsProject::Update() {
 	//	Input
 	DetectInput(timeTracker.GetTime(), (float)BUFFER_WIDTH, (float)BUFFER_HEIGHT);
 
-	//	Frustum CUlling
+	//	Frustum Culling
 	cullAABB(getFrustumPlanes(Mult_4x4(camView, camProjection)));
 
 	std::string lpwinname;
@@ -1060,7 +1053,7 @@ bool GraphicsProject::Update() {
 
 	DirectX::XMMATRIX temp = XMConverter(starWorld);
 	light.position.x = temp.r[3].m128_f32[0];
-	light.position.y = temp.r[3].m128_f32[1];
+	light.position.y = temp.r[3].m128_f32[1] + 25.0f;
 	light.position.z = temp.r[3].m128_f32[2];
 #pragma endregion	
 
@@ -1350,7 +1343,7 @@ bool GraphicsProject::Render(){
 
 //#pragma region MiniMap
 //	//	set to map's rtview
-//	devContext->OMSetRenderTargets(1, &rtvMinimap, dsViewMap); 
+//	devContext->OMSetRenderTargets(1, &rtvMinimap, dsView); 
 //	devContext->ClearRenderTargetView(rtvMinimap, RGBA);
 //
 //	//	draw ground again but from Maps perspective
@@ -1360,21 +1353,29 @@ bool GraphicsProject::Render(){
 //	cbPerObj.WVP = WVP;
 //	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 //
-//	devContext->RSSetState(rState_F);
+//	devContext->IASetInputLayout(vertLayout);
+//	devContext->VSSetShader(vs, NULL, 0);
+//	devContext->PSSetShader(ps, NULL, 0);
+//
 //	devContext->OMSetBlendState(0, 0, 0xffffffff);
+//	devContext->RSSetState(rState_B);
 //	devContext->DrawIndexed(FindNumIndicies(ibGround), 0, 0);
 //
 //	//	set back to regular rtview
+//	stride = sizeof(VERTEX);
+//
 //	devContext->OMSetRenderTargets(1, &rtView, dsView);
+//
+//	devContext->VSSetShader(vs, 0, 0);
 //	devContext->PSSetShader(ps, 0, 0);
 //
 //	devContext->IASetIndexBuffer(ibCube, DXGI_FORMAT_R32_UINT, 0);
 //	devContext->IAGetVertexBuffers(0, 1, &vbCube, &stride, &offset);
 //
-//	DirectX::XMMATRIX tmp = DirectX::XMMatrixScaling(0.5f, 0.5f, 0.0f) * DirectX::XMMatrixTranslation(0.5f, -0.5f, 0.0f);
+//	DirectX::XMMATRIX tmp = DirectX::XMMatrixScaling(0.25f, 0.25f, 0.0f) * DirectX::XMMatrixTranslation(0.75f, -0.75f, 0.0f);
 //	WVP = XMConverter(tmp);
 //	cbPerObj.WVP = WVP;
-//	cbPerObj.World = Identity();
+//	cbPerObj.World = camView;
 //
 //	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 //	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
@@ -1382,12 +1383,8 @@ bool GraphicsProject::Render(){
 //	devContext->PSSetShaderResources(0, 1, &srvMinimap);
 //	devContext->PSSetSamplers(0, 1, &ssCube);
 //
-//	devContext->RSSetState(rState_F);
+//	devContext->RSSetState(rState_B);
 //	devContext->DrawIndexed(FindNumIndicies(ibCube), 0, 0);
-//
-//	ID3D11ShaderResourceView* srv = nullptr;
-//	devContext->PSSetShaderResources(0, 1, &srv);
-//
 //#pragma endregion
 
 	swapChain->Present(0, 0);
@@ -1598,21 +1595,21 @@ void GraphicsProject::cullAABB(std::vector<FLOAT4> &frustumPlanes) {
 
 			//	Bounds checking - x-axis
 			if (frustumPlanes[planeID].x < 0.0f)	
-				axisVert.x = treeAABB[0].x + treeInstanceData[i].pos.x;
+				axisVert.x = treeAABB[0].x + treeInstData[i].pos.x;
 			else
-				axisVert.x = treeAABB[1].x + treeInstanceData[i].pos.x;
+				axisVert.x = treeAABB[1].x + treeInstData[i].pos.x;
 
 			// y-axis
 			if (frustumPlanes[planeID].y < 0.0f)	
-				axisVert.y = treeAABB[0].y + treeInstanceData[i].pos.y;
+				axisVert.y = treeAABB[0].y + treeInstData[i].pos.y;
 			else
-				axisVert.y = treeAABB[1].y + treeInstanceData[i].pos.y;
+				axisVert.y = treeAABB[1].y + treeInstData[i].pos.y;
 
 			// z-axis
 			if (frustumPlanes[planeID].z < 0.0f)	
-				axisVert.z = treeAABB[0].z + treeInstanceData[i].pos.z;
+				axisVert.z = treeAABB[0].z + treeInstData[i].pos.z;
 			else
-				axisVert.z = treeAABB[1].z + treeInstanceData[i].pos.z;
+				axisVert.z = treeAABB[1].z + treeInstData[i].pos.z;
 
 			if (DirectX::XMVectorGetX(DirectX::XMVector3Dot(planeNormal, XMLoadFloat3(&axisVert))) + planeConstant < 0.0f) {
 				cull = true;
@@ -1621,7 +1618,7 @@ void GraphicsProject::cullAABB(std::vector<FLOAT4> &frustumPlanes) {
 		}
 
 		if (!cull) {
-			tempTreeInstDat[numTreesToDraw].pos = treeInstanceData[i].pos;
+			tempTreeInstDat[numTreesToDraw].pos = treeInstData[i].pos;
 			numTreesToDraw++;
 		}
 	}

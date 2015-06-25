@@ -5,7 +5,6 @@ struct INPUT_VERTEX {
 };
 
 
-float4 main(INPUT_VERTEX input) : SV_TARGET
-{
+float4 main(INPUT_VERTEX input) : SV_TARGET{
 	return input.colorOut;
 }
