@@ -1343,7 +1343,7 @@ bool GraphicsProject::Render(){
 
 //#pragma region MiniMap
 //	//	set to map's rtview
-//	devContext->OMSetRenderTargets(1, &rtvMinimap, dsView); 
+//	devContext->OMSetRenderTargets(1, &rtvMinimap, dsViewMap); 
 //	devContext->ClearRenderTargetView(rtvMinimap, RGBA);
 //
 //	//	draw ground again but from Maps perspective
