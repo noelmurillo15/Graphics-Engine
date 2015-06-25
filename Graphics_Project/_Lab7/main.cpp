@@ -14,8 +14,8 @@
 #include "PS_Star.csh"
 #include "VS_Norm.csh"
 #include "PS_Norm.csh"
-#include "PS_Skybox.csh"
 #include "VS_Skybox.csh"
+#include "PS_Skybox.csh"
 #include "VS_Instancing.csh"
 #include "PS_Instancing.csh"
 
@@ -46,6 +46,7 @@ class GraphicsProject {
 	ID3D11InputLayout*		skyboxLayout = nullptr;
 	ID3D11InputLayout*		starLayout = nullptr;
 	ID3D11InputLayout*		normMapLayout = nullptr;
+	ID3D11InputLayout*		instLayout = nullptr;
 	
 
 	ID3D11Texture2D*		dsBuffer = nullptr;
@@ -57,37 +58,39 @@ class GraphicsProject {
 	//	Buffers
 	ID3D11Buffer*			cbPerObjectBuffer = nullptr;
 	ID3D11Buffer*			cbPerFrameBuffer = nullptr;
+	ID3D11Buffer*			cbPerInstanceBuffer = nullptr;
+	ID3D11Buffer*			cbPerTreeBuffer = nullptr;
 
-	ID3D11Buffer*			vBuffer_Skybox = nullptr;
-	ID3D11Buffer*			iBuffer_Skybox = nullptr;
+	ID3D11Buffer*			vbSkybox = nullptr;
+	ID3D11Buffer*			vbCube = nullptr;
+	ID3D11Buffer*			vbGround = nullptr;
+	ID3D11Buffer*			vbLink = nullptr;
+	ID3D11Buffer*			vbBarrel = nullptr;
+	ID3D11Buffer*			vbStar = nullptr;
+	ID3D11Buffer*			vbTree = nullptr;
 
-	ID3D11Buffer*			iBuffer_Cube = nullptr;
-	ID3D11Buffer*			vBuffer_Cube = nullptr;
+	ID3D11Buffer*			ibSkybox = nullptr;
+	ID3D11Buffer*			ibCube = nullptr;
+	ID3D11Buffer*			ibGround = nullptr;
+	ID3D11Buffer*			ibLink = nullptr;
+	ID3D11Buffer*			ibBarrel = nullptr;
+	ID3D11Buffer*			ibStar = nullptr;
+	ID3D11Buffer*			ibTree = nullptr;
 
-	ID3D11Buffer*			iBuffer_Ground = nullptr;
-	ID3D11Buffer*			vBuffer_Ground = nullptr;
-
-	ID3D11Buffer*			iBuffer_LinkModel = nullptr;
-	ID3D11Buffer*			vBuffer_LinkModel = nullptr;
-
-	ID3D11Buffer*			iBuffer_BarrelModel = nullptr;
-	ID3D11Buffer*			vBuffer_BarrelModel = nullptr;
-
-	ID3D11Buffer*			iBuffer_Star = nullptr;
-	ID3D11Buffer*			vBuffer_Star = nullptr;
+	ID3D11Buffer*			treeInstanceBuff = nullptr;
 
 	//	Shaders
-	ID3D11VertexShader*		vShader = nullptr;
-	ID3D11PixelShader*		pShader = nullptr;
+	ID3D11VertexShader*		vs = nullptr;
+	ID3D11VertexShader*		vsStar = nullptr;
+	ID3D11VertexShader*		vsSkybox = nullptr;
+	ID3D11VertexShader*		vsNorm = nullptr;
+	ID3D11VertexShader*		vsInst = nullptr;
 
-	ID3D11VertexShader*		vShader_Star = nullptr;
-	ID3D11PixelShader*		pShader_Star = nullptr;
-
-	ID3D11VertexShader*		vShader_Skybox = nullptr;
-	ID3D11PixelShader*		pShader_Skybox = nullptr;
-
-	ID3D11VertexShader*		vShader_NormMap = nullptr;
-	ID3D11PixelShader*		pShader_NormMap = nullptr;
+	ID3D11PixelShader*		ps = nullptr;
+	ID3D11PixelShader*		psStar = nullptr;
+	ID3D11PixelShader*		psSkybox = nullptr;
+	ID3D11PixelShader*		psNorm = nullptr;
+	ID3D11PixelShader*		psInst = nullptr;
 	
 	//	Raster States
 	ID3D11RasterizerState*	rState_B_AA = nullptr;
@@ -105,6 +108,8 @@ class GraphicsProject {
 	ID3D11ShaderResourceView* srvBarrel = nullptr;
 	ID3D11ShaderResourceView* srvBarrelN = nullptr;	
 	ID3D11ShaderResourceView* srvBark = nullptr;
+	ID3D11ShaderResourceView* srvBarkN = nullptr;
+	ID3D11ShaderResourceView* srvLeaf = nullptr;
 
 	//	Samp & Blend States
 	ID3D11SamplerState*		ssCube = nullptr;
@@ -119,41 +124,18 @@ class GraphicsProject {
 	MATRIX4X4				mapView;
 	MATRIX4X4				mapProjection;
 
-
-
-	//	Instancing
-	cbPerTree		cbPerInstTree;
-	cbPerScene		cbPerInst;
-
-	ID3D11Buffer*			cbPerInstanceBuffer = nullptr;
-	ID3D11Buffer*			cbPerTreeBuffer = nullptr;
-
-	ID3D11InputLayout*		instLayout = nullptr;
-
-	ID3D11Buffer*			treeInstanceBuff = nullptr;
-	ID3D11Buffer*			treeVertBuff = nullptr;
-	ID3D11Buffer*			treeIndexBuff = nullptr;
-
-	ID3D11VertexShader*		vShader_Instancing = nullptr;
-	ID3D11PixelShader*		pShader_Instancing = nullptr;
-
-	Model*					treeModel = nullptr;
-	ID3D11ShaderResourceView* srvLeaf = nullptr;
-
-
-	MATRIX4X4				treeWorld;
-
-
-
-
 	//	Models
 	Model*					linkModel = nullptr;
 	Model*					barrelModel = nullptr;
 	Model*					skyboxModel = nullptr;
+	Model*					treeModel = nullptr;
 
 	//	cBuffer Objs
-	cbPerObject		cbPerObj;
+	cbPerScene		cbPerInst;
 	cbPerFrame		constbuffPerFrame;	
+	cbPerTree		cbPerInstTree;
+	cbPerObject		cbPerObj;
+
 	Light			light;
 
 	//	Worlds
@@ -167,8 +149,7 @@ class GraphicsProject {
 	MATRIX4X4		skyboxWorld;
 	MATRIX4X4		groundWorld;
 	MATRIX4X4		starWorld;
-
-	MATRIX4X4		treeWorlds[NUMTREES];
+	MATRIX4X4		treeWorld;
 
 	//	Camera
 	MATRIX4X4		camView;
@@ -427,25 +408,25 @@ bool GraphicsProject::InitScene(){
 	result = CreateDDSTextureFromFile(device, L"_barrel.dds", NULL, &srvBarrel, NULL);
 	result = CreateDDSTextureFromFile(device, L"_barrelN.dds", NULL, &srvBarrelN, NULL);
 	result = CreateDDSTextureFromFile(device, L"_bark.dds", NULL, &srvBark, NULL);
-
+	result = CreateDDSTextureFromFile(device, L"_barkN.dds", NULL, &srvBarkN, NULL);
 	result = CreateDDSTextureFromFile(device, L"_leaf.dds", NULL, &srvLeaf, NULL);
 #pragma endregion
 
 #pragma region Create Shaders
-	result = device->CreateVertexShader(VS, sizeof(VS), NULL, &vShader);
-	result = device->CreatePixelShader(PS, sizeof(PS), NULL, &pShader);
+	result = device->CreateVertexShader(VS, sizeof(VS), NULL, &vs);
+	result = device->CreatePixelShader(PS, sizeof(PS), NULL, &ps);
 
-	result = device->CreateVertexShader(VS_Star, sizeof(VS_Star), NULL, &vShader_Star);
-	result = device->CreatePixelShader(PS_Star, sizeof(PS_Star), NULL, &pShader_Star);
+	result = device->CreateVertexShader(VS_Star, sizeof(VS_Star), NULL, &vsStar);
+	result = device->CreatePixelShader(PS_Star, sizeof(PS_Star), NULL, &psStar);
 
-	result = device->CreateVertexShader(VS_Norm, sizeof(VS_Norm), NULL, &vShader_NormMap);
-	result = device->CreatePixelShader(PS_Norm, sizeof(PS_Norm), NULL, &pShader_NormMap);
+	result = device->CreateVertexShader(VS_Norm, sizeof(VS_Norm), NULL, &vsNorm);
+	result = device->CreatePixelShader(PS_Norm, sizeof(PS_Norm), NULL, &psNorm);
 
-	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vShader_Skybox);
-	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &pShader_Skybox);
+	result = device->CreateVertexShader(VS_Skybox, sizeof(VS_Skybox), NULL, &vsSkybox);
+	result = device->CreatePixelShader(PS_Skybox, sizeof(PS_Skybox), NULL, &psSkybox);
 
-	result = device->CreateVertexShader(VS_Instancing, sizeof(VS_Instancing), NULL, &vShader_Instancing);
-	result = device->CreatePixelShader(PS_Instancing, sizeof(PS_Instancing), NULL, &pShader_Instancing);
+	result = device->CreateVertexShader(VS_Instancing, sizeof(VS_Instancing), NULL, &vsInst);
+	result = device->CreatePixelShader(PS_Instancing, sizeof(PS_Instancing), NULL, &psInst);
 #pragma endregion
 
 #pragma region InputLayer
@@ -459,7 +440,7 @@ bool GraphicsProject::InitScene(){
 	UINT arrSize = ARRAYSIZE(layout);
 	result = device->CreateInputLayout(layout, arrSize, VS, sizeof(VS), &vertLayout);
 
-	//	VS_Skybox
+	//	Skybox
 	D3D11_INPUT_ELEMENT_DESC layout_Sky[] = {
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
@@ -467,7 +448,7 @@ bool GraphicsProject::InitScene(){
 	arrSize = ARRAYSIZE(layout_Sky);
 	result = device->CreateInputLayout(layout_Sky, arrSize, VS_Skybox, sizeof(VS_Skybox), &skyboxLayout);
 
-	//	VS_Star
+	//	Star
 	D3D11_INPUT_ELEMENT_DESC layout_Star[] = {
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -476,7 +457,7 @@ bool GraphicsProject::InitScene(){
 	arrSize = ARRAYSIZE(layout_Star);
 	result = device->CreateInputLayout(layout_Star, arrSize, VS_Star, sizeof(VS_Star), &starLayout);
 
-	//	VS_NormMap
+	//	Normal Mapping
 	D3D11_INPUT_ELEMENT_DESC layout_N[] = {
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -487,12 +468,11 @@ bool GraphicsProject::InitScene(){
 	arrSize = ARRAYSIZE(layout_N);
 	result = device->CreateInputLayout(layout_N, arrSize, VS_Norm, sizeof(VS_Norm), &normMapLayout);
 
-	//	VS_Instancing
+	//	Instancing
 	D3D11_INPUT_ELEMENT_DESC layout_I[] = {
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		//{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "INSTANCEPOS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1}
 	};
 
@@ -842,7 +822,7 @@ bool GraphicsProject::InitScene(){
 	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
 	iinitData.pSysMem = iCube;
 
-	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Cube);
+	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &ibCube);
 
 	//	Ground
 	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
@@ -852,7 +832,7 @@ bool GraphicsProject::InitScene(){
 	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
 	iinitData.pSysMem = iGround;
 
-	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Ground);
+	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &ibGround);
 
 	//	Star
 	ZeroMemory(&indexBufferDesc, sizeof(D3D11_BUFFER_DESC));
@@ -862,7 +842,7 @@ bool GraphicsProject::InitScene(){
 	ZeroMemory(&iinitData, sizeof(D3D11_SUBRESOURCE_DATA));
 	iinitData.pSysMem = iStar;
 
-	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &iBuffer_Star);
+	result = device->CreateBuffer(&indexBufferDesc, &iinitData, &ibStar);
 #pragma endregion
 
 #pragma region VertexBuffer
@@ -877,7 +857,7 @@ bool GraphicsProject::InitScene(){
 	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
 	vertBufferData.pSysMem = Cube;
 
-	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Cube);
+	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vbCube);
 
 	//	Ground
 	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
@@ -887,7 +867,7 @@ bool GraphicsProject::InitScene(){
 	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
 	vertBufferData.pSysMem = Ground;
 
-	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Ground);
+	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vbGround);
 
 	//	Star
 	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
@@ -897,7 +877,7 @@ bool GraphicsProject::InitScene(){
 	ZeroMemory(&vertBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
 	vertBufferData.pSysMem = Star;
 
-	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vBuffer_Star);
+	result = device->CreateBuffer(&vertexBufferDesc, &vertBufferData, &vbStar);
 #pragma endregion
 
 #pragma region SamplerState
@@ -987,7 +967,7 @@ bool GraphicsProject::InitScene(){
 	vbuffdesc.ByteWidth = sizeof(Vert) * linkModel->interleaved.size();
 	ZeroMemory(&vSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 	vSubdata.pSysMem = &linkModel->interleaved[0];
-	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vBuffer_LinkModel);
+	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vbLink);
 
 	ZeroMemory(&iBuffdesc, sizeof(D3D11_BUFFER_DESC));
 	iBuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
@@ -995,7 +975,7 @@ bool GraphicsProject::InitScene(){
 	iBuffdesc.ByteWidth = sizeof(unsigned int) * linkModel->out_Indicies.size();
 	ZeroMemory(&iSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 	iSubdata.pSysMem = &(linkModel->out_Indicies[0]);
-	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_LinkModel);
+	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &ibLink);
 
 	//	Skybox
 	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
@@ -1004,7 +984,7 @@ bool GraphicsProject::InitScene(){
 	vbuffdesc.ByteWidth = sizeof(Vert) * skyboxModel->interleaved.size();
 	ZeroMemory(&vSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 	vSubdata.pSysMem = &skyboxModel->interleaved[0];
-	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vBuffer_Skybox);
+	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vbSkybox);
 
 	ZeroMemory(&iBuffdesc, sizeof(D3D11_BUFFER_DESC));
 	iBuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
@@ -1012,7 +992,7 @@ bool GraphicsProject::InitScene(){
 	iBuffdesc.ByteWidth = sizeof(unsigned int) * skyboxModel->out_Indicies.size();
 	ZeroMemory(&iSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 	iSubdata.pSysMem = &(skyboxModel->out_Indicies[0]);
-	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_Skybox);
+	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &ibSkybox);
 
 	//	Barrel
 	ComputeTangents(barrelModel);
@@ -1022,7 +1002,7 @@ bool GraphicsProject::InitScene(){
 	vbuffdesc.ByteWidth = sizeof(Vert) * barrelModel->interleaved.size();
 	ZeroMemory(&vSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 	vSubdata.pSysMem = &barrelModel->interleaved[0];
-	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vBuffer_BarrelModel);
+	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vbBarrel);
 
 	ZeroMemory(&iBuffdesc, sizeof(D3D11_BUFFER_DESC));
 	iBuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
@@ -1030,20 +1010,16 @@ bool GraphicsProject::InitScene(){
 	iBuffdesc.ByteWidth = sizeof(unsigned int) * barrelModel->out_Indicies.size();
 	ZeroMemory(&iSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 	iSubdata.pSysMem = &(barrelModel->out_Indicies[0]);
-	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &iBuffer_BarrelModel);
+	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &ibBarrel);
 
 	//	Tree
-	/*for (int i = 0; i < NUMTREES; ++i){
-		treeModel->interleaved.at(i).tangent = inst[i].pos;
-	}*/
-	ComputeTangents(treeModel);
 	ZeroMemory(&vbuffdesc, sizeof(D3D11_BUFFER_DESC));
 	vbuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
 	vbuffdesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vbuffdesc.ByteWidth = sizeof(Vert) * treeModel->interleaved.size();
 	ZeroMemory(&vSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 	vSubdata.pSysMem = &treeModel->interleaved[0];
-	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &treeVertBuff);
+	result = device->CreateBuffer(&vbuffdesc, &vSubdata, &vbTree);
 
 	ZeroMemory(&iBuffdesc, sizeof(D3D11_BUFFER_DESC));
 	iBuffdesc.Usage = D3D11_USAGE_IMMUTABLE;
@@ -1051,7 +1027,7 @@ bool GraphicsProject::InitScene(){
 	iBuffdesc.ByteWidth = sizeof(unsigned int) * treeModel->out_Indicies.size();
 	ZeroMemory(&iSubdata, sizeof(D3D11_SUBRESOURCE_DATA));
 	iSubdata.pSysMem = &(treeModel->out_Indicies[0]);
-	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &treeIndexBuff);
+	result = device->CreateBuffer(&iBuffdesc, &iSubdata, &ibTree);
 #pragma endregion
 
 	return true;
@@ -1099,29 +1075,30 @@ bool GraphicsProject::Update() {
 
 #pragma region Define Worlds
 	linkWorld = RotateZ(linkWorld, rot);
-	linkWorld = Translate(linkWorld, 0.0f, -0.8f, 15.0f);
+	linkWorld = Translate(linkWorld, 0.0f, 0.8f, 15.0f);
 	linkWorld = Scale_4x4(linkWorld, 0.25f, 0.25f, 0.25f);
 
 	barrelWorld = RotateZ(barrelWorld, -rot);
-	barrelWorld = Translate(barrelWorld, 5.0f, -0.8f, 15.0f);
+	barrelWorld = Translate(barrelWorld, 5.0f, 0.8f, 15.0f);
 	barrelWorld = Scale_4x4(barrelWorld, 0.0025f, 0.0025f, 0.0025f);
 
-	cube1World = Translate(cube1World, 5.0f, 0.0f, 3.0f);
+	cube1World = Translate(cube1World, 5.0f, 0.8f, 3.0f);
 	cube1World = RotateZ(cube1World, rot);
 
 	cube2World = RotateX(cube2World, rot);
+	cube2World = Translate(cube2World, 0.0f, 1.0f, 0.0f);
 	cube2World = Scale_4x4(cube2World, 0.8f, 0.8f, 0.8f);
 
 	cube3World = RotateX(cube3World, -rot);
-	cube3World = Translate(cube3World, 0.0f, 0.0f, 3.0f);
+	cube3World = Translate(cube3World, 0.0f, 2.0f, 3.0f);
 	cube3World = Scale_4x4(cube3World, 1.4f, 1.4f, 1.4f);
 
 	cube4World = RotateX(cube4World, rot);
-	cube4World = Translate(cube4World, 0.0f, 0.0f, 10.0f);
+	cube4World = Translate(cube4World, 0.0f, 2.8f, 10.0f);
 	cube4World = Scale_4x4(cube4World, 2.0f, 2.0f, 2.0f);
 
-	groundWorld = Translate(groundWorld, 0.0f, 0.0f, 0.0f);
-	groundWorld = Scale_4x4(groundWorld, 20.0f, 1.0f, 20.0f);
+	groundWorld = Translate(groundWorld, 0.0f, 1.0f, 0.0f);
+	groundWorld = Scale_4x4(groundWorld, 100.0f, 1.0f, 100.0f);
 
 	DirectX::XMMATRIX temp = XMConverter(starWorld);
 	light.position.x = temp.r[3].m128_f32[0];
@@ -1167,12 +1144,12 @@ bool GraphicsProject::Render(){
 	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 
-	devContext->IASetVertexBuffers(0, 1, &vBuffer_Skybox, &stride, &offset);
-	devContext->IASetIndexBuffer(iBuffer_Skybox, DXGI_FORMAT_R32_UINT, 0);
+	devContext->IASetVertexBuffers(0, 1, &vbSkybox, &stride, &offset);
+	devContext->IASetIndexBuffer(ibSkybox, DXGI_FORMAT_R32_UINT, 0);
 
 	devContext->IASetInputLayout(skyboxLayout);
-	devContext->VSSetShader(vShader_Skybox, NULL, 0);
-	devContext->PSSetShader(pShader_Skybox, NULL, 0);
+	devContext->VSSetShader(vsSkybox, NULL, 0);
+	devContext->PSSetShader(psSkybox, NULL, 0);
 
 	devContext->OMSetBlendState(0, 0, 0xffffffff);
 	devContext->PSSetShaderResources(0, 1, &srvSkymap);
@@ -1180,206 +1157,240 @@ bool GraphicsProject::Render(){
 	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	devContext->RSSetState(rState_F);
-	devContext->DrawIndexed(FindNumIndicies(iBuffer_Skybox), 0, 0);
+	devContext->DrawIndexed(FindNumIndicies(ibSkybox), 0, 0);
 
 	devContext->ClearDepthStencilView(dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1, 0);
 #pragma endregion
 
-//#pragma region Draw Star
-//	stride = sizeof(SIMPLE_VERTEX);
-//
-//	WVP = Mult_4x4(starWorld, camView);
-//	WVP = Mult_4x4(WVP, camProjection);
-//	cbPerObj.World = (starWorld);
-//	cbPerObj.WVP = WVP;
-//
-//	devContext->UpdateSubresource(cbPerObjectBuffer, NULL, NULL, &cbPerObj, NULL, NULL);
-//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-//
-//	devContext->IASetVertexBuffers(0, 1, &vBuffer_Star, &stride, &offset);
-//	devContext->IASetIndexBuffer(iBuffer_Star, DXGI_FORMAT_R32_UINT, 0);
-//
-//	devContext->IASetInputLayout(starLayout);
-//	devContext->VSSetShader(vShader_Star, NULL, NULL);
-//	devContext->PSSetShader(pShader_Star, NULL, NULL);
-//
-//	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//
-//	devContext->RSSetState(rState_Wire);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Star), 0, 0);
-//#pragma endregion
-//
-//#pragma region Draw Ground
-//	stride = sizeof(VERTEX);
-//
-//	WVP = Mult_4x4(groundWorld, camView);
-//	WVP = Mult_4x4(WVP, camProjection);
-//	cbPerObj.World = (groundWorld);
-//	cbPerObj.WVP = WVP;
-//
-//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
-//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-//
-//	devContext->IASetVertexBuffers(0, 1, &vBuffer_Ground, &stride, &offset);
-//	devContext->IASetIndexBuffer(iBuffer_Ground, DXGI_FORMAT_R32_UINT, 0);
-//
-//	devContext->IASetInputLayout(vertLayout);
-//	devContext->VSSetShader(vShader, NULL, 0);
-//	devContext->PSSetShader(pShader, NULL, 0);
-//
-//	devContext->PSSetShaderResources(0, 1, &srvGround);
-//	devContext->PSSetSamplers(0, 1, &ssSkybox);
-//	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//
-//	devContext->RSSetState(rState_F);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Ground), 0, 0);
-//#pragma endregion
-//
-//#pragma region Draw Link
-//	stride = sizeof(Vert);
-//
-//	WVP = Mult_4x4(linkWorld, camView);
-//	WVP = Mult_4x4(WVP, camProjection);
-//	cbPerObj.World = (linkWorld);
-//	cbPerObj.WVP = WVP;
-//
-//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
-//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-//
-//	devContext->IASetVertexBuffers(0, 1, &vBuffer_LinkModel, &stride, &offset);
-//	devContext->IASetIndexBuffer(iBuffer_LinkModel, DXGI_FORMAT_R32_UINT, 0);
-//
-//	devContext->IASetInputLayout(vertLayout);
-//	devContext->VSSetShader(vShader, NULL, 0);
-//	devContext->PSSetShader(pShader, NULL, 0);
-//
-//	devContext->RSSetState(rState_B);
-//	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//	
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_LinkModel), 0, 0);
-//#pragma endregion
-//
-//#pragma region Draw Barrel
-//	stride = sizeof(Vert);
-//
-//	WVP = Mult_4x4(barrelWorld, camView);
-//	WVP = Mult_4x4(WVP, camProjection);
-//	cbPerObj.World = (barrelWorld);
-//	cbPerObj.WVP = WVP;
-//
-//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
-//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-//
-//	devContext->IASetVertexBuffers(0, 1, &vBuffer_BarrelModel, &stride, &offset);
-//	devContext->IASetIndexBuffer(iBuffer_BarrelModel, DXGI_FORMAT_R32_UINT, 0);
-//
-//	devContext->IASetInputLayout(normMapLayout);
-//	devContext->VSSetShader(vShader_NormMap , NULL, 0);
-//	devContext->PSSetShader(pShader_NormMap , NULL, 0);
-//
-//	devContext->PSSetShaderResources(0, 1, &srvBarrel);
-//	devContext->PSSetShaderResources(1, 1, &srvBarrelN);
-//	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//
-//	devContext->RSSetState(rState_B_AA);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_BarrelModel), 0, 0);
-//#pragma endregion
-//
-//#pragma region Draw Cube
-//	stride = sizeof(VERTEX);	
-//
-//	WVP = Mult_4x4(cube1World, camView);
-//	WVP = Mult_4x4(WVP, camProjection);
-//	cbPerObj.World = (cube1World);
-//	cbPerObj.WVP = WVP;
-//
-//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
-//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);	
-//	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
-//	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-//	devContext->VSSetShader(vShader, NULL, 0);
-//	devContext->PSSetShader(pShader, NULL, 0);
-//	devContext->IASetInputLayout(vertLayout);
-//	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//	devContext->PSSetShaderResources(0, 1, &srvGrass);
-//	devContext->PSSetSamplers(0, 1, &ssCube);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
-//#pragma endregion
-//
-//#pragma region Draw Cube2
-//	WVP = Mult_4x4(cube2World, camView);
-//	WVP = Mult_4x4(WVP, camProjection);
-//	cbPerObj.World = (cube2World);
-//	cbPerObj.WVP = WVP;	
-//
-//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
-//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-//
-//	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
-//	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-//
-//	devContext->IASetInputLayout(vertLayout);
-//	devContext->VSSetShader(vShader, NULL, 0);
-//	devContext->PSSetShader(pShader, NULL, 0);
-//
-//	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
-//	devContext->PSSetShaderResources(0, 1, &srvGlass);
-//	devContext->PSSetSamplers(0, 1, &ssCube);
-//	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//
-//	devContext->RSSetState(rState_F_AA);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
-//#pragma endregion
-//
-//#pragma region Draw Cube3
-//	WVP = Mult_4x4(cube3World, camView);
-//	WVP = Mult_4x4(WVP, camProjection);
-//	cbPerObj.World = (cube3World);
-//	cbPerObj.WVP = WVP;
-//
-//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
-//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-//
-//	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
-//	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-//
-//	devContext->IASetInputLayout(vertLayout);
-//	devContext->VSSetShader(vShader, NULL, 0);
-//	devContext->PSSetShader(pShader, NULL, 0);
-//
-//	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
-//	devContext->PSSetShaderResources(0, 1, &srvGlass);
-//	devContext->PSSetSamplers(0, 1, &ssCube);
-//	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//
-//	devContext->RSSetState(rState_F_AA);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
-//#pragma endregion
-//
-//#pragma region Draw Cube4
-//	WVP = Mult_4x4(cube4World, camView);
-//	WVP = Mult_4x4(WVP, camProjection);
-//	cbPerObj.World = (cube4World);
-//	cbPerObj.WVP = WVP;
-//
-//	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
-//	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-//
-//	devContext->IASetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
-//	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-//
-//	devContext->IASetInputLayout(vertLayout);
-//	devContext->VSSetShader(vShader, NULL, 0);
-//	devContext->PSSetShader(pShader, NULL, 0);
-//
-//	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
-//	devContext->PSSetShaderResources(0, 1, &srvGlass);
-//	devContext->PSSetSamplers(0, 1, &ssCube);
-//	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//
-//	devContext->RSSetState(rState_F_AA);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
-//#pragma endregion
+#pragma region Draw Star
+	stride = sizeof(SIMPLE_VERTEX);
+
+	WVP = Mult_4x4(starWorld, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (starWorld);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, NULL, NULL, &cbPerObj, NULL, NULL);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vbStar, &stride, &offset);
+	devContext->IASetIndexBuffer(ibStar, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(starLayout);
+	devContext->VSSetShader(vsStar, NULL, NULL);
+	devContext->PSSetShader(psStar, NULL, NULL);
+
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->RSSetState(rState_Wire);
+	devContext->DrawIndexed(FindNumIndicies(ibStar), 0, 0);
+#pragma endregion
+
+#pragma region Draw Ground
+	stride = sizeof(VERTEX);
+
+	WVP = Mult_4x4(groundWorld, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (groundWorld);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vbGround, &stride, &offset);
+	devContext->IASetIndexBuffer(ibGround, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
+	devContext->VSSetShader(vs, NULL, 0);
+	devContext->PSSetShader(ps, NULL, 0);
+
+	devContext->PSSetShaderResources(0, 1, &srvGround);
+	devContext->PSSetSamplers(0, 1, &ssSkybox);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->RSSetState(rState_F);
+	devContext->DrawIndexed(FindNumIndicies(ibGround), 0, 0);
+#pragma endregion
+
+#pragma region Draw Link
+	stride = sizeof(Vert);
+
+	WVP = Mult_4x4(linkWorld, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (linkWorld);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vbLink, &stride, &offset);
+	devContext->IASetIndexBuffer(ibLink, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
+	devContext->VSSetShader(vs, NULL, 0);
+	devContext->PSSetShader(ps, NULL, 0);
+
+	devContext->RSSetState(rState_B);
+	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	
+	devContext->DrawIndexed(FindNumIndicies(ibLink), 0, 0);
+#pragma endregion
+
+#pragma region Draw Barrel
+	stride = sizeof(Vert);
+
+	WVP = Mult_4x4(barrelWorld, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (barrelWorld);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vbBarrel, &stride, &offset);
+	devContext->IASetIndexBuffer(ibBarrel, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(normMapLayout);
+	devContext->VSSetShader(vsNorm , NULL, 0);
+	devContext->PSSetShader(psNorm , NULL, 0);
+
+	devContext->PSSetShaderResources(0, 1, &srvBarrel);
+	devContext->PSSetShaderResources(1, 1, &srvBarrelN);
+	devContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->RSSetState(rState_B_AA);
+	devContext->DrawIndexed(FindNumIndicies(ibBarrel), 0, 0);
+#pragma endregion
+
+#pragma region Draw Instance
+	UINT strides[2] = { sizeof(Vert), sizeof(InstanceData) };
+	UINT offsets[2] = { 0, 0 };
+
+	devContext->IASetInputLayout(instLayout);
+	devContext->VSSetShader(vsInst, NULL, 0);
+	devContext->PSSetShader(psInst, NULL, 0);
+
+	for (int i = 0; i < 1; ++i) {
+
+		ID3D11Buffer* vertInstBuffers[2] = { vbTree, treeInstanceBuff };
+
+		devContext->IASetIndexBuffer(ibTree, DXGI_FORMAT_R32_UINT, 0);
+		devContext->IASetVertexBuffers(0, 2, vertInstBuffers, strides, offsets);
+
+		WVP = Mult_4x4(treeWorld, camView);
+		WVP = Mult_4x4(WVP, camProjection);
+		cbPerInstTree.World = treeWorld;
+		cbPerInstTree.WVP = WVP;
+		cbPerInstTree.isLeaf = false;
+
+		devContext->UpdateSubresource(cbPerTreeBuffer, 0, NULL, &cbPerInstTree, 0, 0);
+		devContext->VSSetConstantBuffers(0, 1, &cbPerTreeBuffer);
+		devContext->PSSetConstantBuffers(1, 1, &cbPerTreeBuffer);
+
+		devContext->PSSetShaderResources(0, 1, &srvBark);
+		devContext->PSSetShaderResources(1, 1, &srvBarkN);
+		devContext->PSSetSamplers(0, 1, &ssCube);
+
+		devContext->RSSetState(rState_None);
+		devContext->DrawIndexedInstanced(FindNumIndicies(ibTree), NUMTREES, 0, 0, 0);
+	}
+#pragma endregion
+
+#pragma region Draw Cube
+	stride = sizeof(VERTEX);	
+
+	WVP = Mult_4x4(cube1World, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (cube1World);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);	
+	devContext->IASetVertexBuffers(0, 1, &vbCube, &stride, &offset);
+	devContext->IASetIndexBuffer(ibCube, DXGI_FORMAT_R32_UINT, 0);
+	devContext->VSSetShader(vs, NULL, 0);
+	devContext->PSSetShader(ps, NULL, 0);
+	devContext->IASetInputLayout(vertLayout);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	devContext->PSSetShaderResources(0, 1, &srvGrass);
+	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->DrawIndexed(FindNumIndicies(ibCube), 0, 0);
+#pragma endregion
+
+#pragma region Draw Cube2
+	WVP = Mult_4x4(cube2World, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (cube2World);
+	cbPerObj.WVP = WVP;	
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vbCube, &stride, &offset);
+	devContext->IASetIndexBuffer(ibCube, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
+	devContext->VSSetShader(vs, NULL, 0);
+	devContext->PSSetShader(ps, NULL, 0);
+
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
+	devContext->PSSetShaderResources(0, 1, &srvGlass);
+	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->RSSetState(rState_F_AA);
+	devContext->DrawIndexed(FindNumIndicies(ibCube), 0, 0);
+#pragma endregion
+
+#pragma region Draw Cube3
+	WVP = Mult_4x4(cube3World, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (cube3World);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vbCube, &stride, &offset);
+	devContext->IASetIndexBuffer(ibCube, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
+	devContext->VSSetShader(vs, NULL, 0);
+	devContext->PSSetShader(ps, NULL, 0);
+
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
+	devContext->PSSetShaderResources(0, 1, &srvGlass);
+	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->RSSetState(rState_F_AA);
+	devContext->DrawIndexed(FindNumIndicies(ibCube), 0, 0);
+#pragma endregion
+
+#pragma region Draw Cube4
+	WVP = Mult_4x4(cube4World, camView);
+	WVP = Mult_4x4(WVP, camProjection);
+	cbPerObj.World = (cube4World);
+	cbPerObj.WVP = WVP;
+
+	devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	devContext->IASetVertexBuffers(0, 1, &vbCube, &stride, &offset);
+	devContext->IASetIndexBuffer(ibCube, DXGI_FORMAT_R32_UINT, 0);
+
+	devContext->IASetInputLayout(vertLayout);
+	devContext->VSSetShader(vs, NULL, 0);
+	devContext->PSSetShader(ps, NULL, 0);
+
+	devContext->OMSetBlendState(bsTransparency, blendFactor, 0xffffffff);
+	devContext->PSSetShaderResources(0, 1, &srvGlass);
+	devContext->PSSetSamplers(0, 1, &ssCube);
+	devContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	devContext->RSSetState(rState_F_AA);
+	devContext->DrawIndexed(FindNumIndicies(ibCube), 0, 0);
+#pragma endregion
 
 //#pragma region MiniMap
 //	//	set to map's rtview
@@ -1395,14 +1406,14 @@ bool GraphicsProject::Render(){
 //
 //	devContext->RSSetState(rState_F);
 //	devContext->OMSetBlendState(0, 0, 0xffffffff);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Ground), 0, 0);
+//	devContext->DrawIndexed(FindNumIndicies(ibGround), 0, 0);
 //
 //	//	set back to regular rtview
 //	devContext->OMSetRenderTargets(1, &rtView, dsView);
-//	devContext->PSSetShader(pShader, 0, 0);
+//	devContext->PSSetShader(ps, 0, 0);
 //
-//	devContext->IASetIndexBuffer(iBuffer_Cube, DXGI_FORMAT_R32_UINT, 0);
-//	devContext->IAGetVertexBuffers(0, 1, &vBuffer_Cube, &stride, &offset);
+//	devContext->IASetIndexBuffer(ibCube, DXGI_FORMAT_R32_UINT, 0);
+//	devContext->IAGetVertexBuffers(0, 1, &vbCube, &stride, &offset);
 //
 //	DirectX::XMMATRIX tmp = DirectX::XMMatrixScaling(0.5f, 0.5f, 0.0f) * DirectX::XMMatrixTranslation(0.5f, -0.5f, 0.0f);
 //	WVP = XMConverter(tmp);
@@ -1416,46 +1427,12 @@ bool GraphicsProject::Render(){
 //	devContext->PSSetSamplers(0, 1, &ssCube);
 //
 //	devContext->RSSetState(rState_F);
-//	devContext->DrawIndexed(FindNumIndicies(iBuffer_Cube), 0, 0);
+//	devContext->DrawIndexed(FindNumIndicies(ibCube), 0, 0);
 //
 //	ID3D11ShaderResourceView* srv = nullptr;
 //	devContext->PSSetShaderResources(0, 1, &srv);
 //
 //#pragma endregion
-
-#pragma region Draw Instance
-	devContext->VSSetShader(vShader_Instancing, NULL, 0);
-	devContext->PSSetShader(pShader_Instancing, NULL, 0);
-
-	UINT strides[2] = { sizeof(Vert), sizeof(InstanceData) };
-	UINT offsets[2] = { 0, 0 };
-
-	devContext->IASetInputLayout(instLayout);
-	
-	for (int i = 0; i < 1; ++i) {
-
-		ID3D11Buffer* vertInstBuffers[2] = { treeVertBuff, treeInstanceBuff };
-
-		devContext->IASetIndexBuffer(treeIndexBuff, DXGI_FORMAT_R32_UINT, 0);
-		devContext->IASetVertexBuffers(0, 2, vertInstBuffers, strides, offsets);
-
-		WVP = Mult_4x4(treeWorld, camView);
-		WVP = Mult_4x4(WVP, camProjection);
-		cbPerInstTree.World = treeWorld;
-		cbPerInstTree.WVP = WVP;
-		cbPerInstTree.isLeaf = false;
-
-		devContext->UpdateSubresource(cbPerTreeBuffer, 0, NULL, &cbPerInstTree, 0, 0);
-		devContext->VSSetConstantBuffers(0, 1, &cbPerTreeBuffer);
-		devContext->PSSetConstantBuffers(1, 1, &cbPerTreeBuffer);
-
-		devContext->PSSetShaderResources(0, 1, &srvBark);
-		devContext->PSSetSamplers(0, 1, &ssCube);
-
-		devContext->RSSetState(rState_None);
-		devContext->DrawIndexedInstanced(FindNumIndicies(treeIndexBuff), NUMTREES, 0, 0, 0);
-	}
-#pragma endregion
 
 	swapChain->Present(0, 0);
 	return true;
@@ -1696,18 +1673,18 @@ bool GraphicsProject::ShutDown() {
 	cbPerObjectBuffer->Release();
 	cbPerFrameBuffer->Release();
 
-	iBuffer_Cube->Release();
-	vBuffer_Cube->Release();
-	vBuffer_LinkModel->Release();
-	iBuffer_LinkModel->Release();
-	vBuffer_BarrelModel->Release();
-	iBuffer_BarrelModel->Release();
-	iBuffer_Ground->Release();
-	vBuffer_Ground->Release();
-	vBuffer_Skybox->Release();
-	iBuffer_Skybox->Release();
-	iBuffer_Star->Release();
-	vBuffer_Star->Release();
+	ibCube->Release();
+	vbCube->Release();
+	vbLink->Release();
+	ibLink->Release();
+	vbBarrel->Release();
+	ibBarrel->Release();
+	ibGround->Release();
+	vbGround->Release();
+	vbSkybox->Release();
+	ibSkybox->Release();
+	ibStar->Release();
+	vbStar->Release();
 
 	dsBuffer->Release();
 	dsView->Release();
@@ -1720,14 +1697,14 @@ bool GraphicsProject::ShutDown() {
 	starLayout->Release();
 	normMapLayout->Release();
 
-	vShader->Release();
-	pShader->Release();
-	vShader_Star->Release();
-	pShader_Star->Release();
-	vShader_NormMap->Release();
-	pShader_NormMap->Release();
-	vShader_Skybox->Release();
-	pShader_Skybox->Release();
+	vs->Release();
+	ps->Release();
+	vsStar->Release();
+	psStar->Release();
+	vsNorm->Release();
+	psNorm->Release();
+	vsSkybox->Release();
+	psSkybox->Release();
 
 	ssCube->Release();
 	ssSkybox->Release();
@@ -1762,11 +1739,12 @@ bool GraphicsProject::ShutDown() {
 	cbPerTreeBuffer->Release();
 	instLayout->Release();
 	treeInstanceBuff->Release();
-	treeVertBuff->Release();
-	treeIndexBuff->Release();
-	vShader_Instancing->Release();
-	pShader_Instancing->Release();
+	vbTree->Release();
+	ibTree->Release();
+	vsInst->Release();
+	psInst->Release();
 	srvLeaf->Release();
+	srvBarkN->Release();
 
 
 
