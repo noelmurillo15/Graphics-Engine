@@ -58,8 +58,6 @@ class GraphicsProject {
 	//	Buffers
 	ID3D11Buffer*			cbPerObjectBuffer = nullptr;
 	ID3D11Buffer*			cbPerFrameBuffer = nullptr;
-	ID3D11Buffer*			cbPerInstanceBuffer = nullptr;
-	ID3D11Buffer*			cbPerTreeBuffer = nullptr;
 
 	ID3D11Buffer*			vbSkybox = nullptr;
 	ID3D11Buffer*			vbCube = nullptr;
@@ -124,9 +122,7 @@ class GraphicsProject {
 	MATRIX4X4				mapProjection;	
 
 	//	cBuffer structs
-	cbPerScene		cbPerInst;
 	cbPerFrame		constbuffPerFrame;	
-	cbPerTree		cbPerInstTree;
 	cbPerObject		cbPerObj;
 
 	Light			light;
@@ -704,42 +700,6 @@ bool GraphicsProject::InitScene(){
 	result = device->CreateBuffer(&instBuffDesc, &instData, &treeInstanceBuff);
 
 	treeWorld = Identity();
-
-	DirectX::XMMATRIX tempMatrix;
-	DirectX::XMVECTOR tempPos;
-	DirectX::XMFLOAT3 fTPos;
-	DirectX::XMMATRIX rotationMatrix;
-	DirectX::XMMATRIX Scale;
-	DirectX::XMMATRIX Translation;
-
-	for (int i = 0; i < NUMLEAVESPERTREE; i++)
-	{
-		float rotX = (rand() % 2000) / 500.0f; // Value between 0 and 4 PI (two circles, makes it slightly more mixed)
-		float rotY = (rand() % 2000) / 500.0f;
-		float rotZ = (rand() % 2000) / 500.0f;
-
-		float distFromCenter = 6.0f - ((rand() % 1000) / 250.0f);
-
-		if (distFromCenter > 4.0f)
-			distFromCenter = 4.0f;
-
-		tempPos = DirectX::XMVectorSet(distFromCenter, 0.0f, 0.0f, 0.0f);
-		rotationMatrix = DirectX::XMMatrixRotationRollPitchYaw(rotX, rotY, rotZ);
-		tempPos = DirectX::XMVector3TransformCoord(tempPos, rotationMatrix);
-
-		if (DirectX::XMVectorGetY(tempPos) < -1.0f)
-			tempPos = DirectX::XMVectorSetY(tempPos, -DirectX::XMVectorGetY(tempPos));
-
-		DirectX::XMStoreFloat3(&fTPos, tempPos);
-
-		Scale = DirectX::XMMatrixScaling(0.25f, 0.25f, 0.25f);
-		Translation = DirectX::XMMatrixTranslation(fTPos.x, fTPos.y + 8.0f, fTPos.z);
-		tempMatrix = Scale * rotationMatrix * Translation;
-
-		// To make things simple, we just store the matrix directly into our cbPerInst structure
-		cbPerInst.leafOnTree[i] = XMConverter(tempMatrix);
-	}
-
 #pragma endregion
 
 #pragma region Cam Setup
@@ -786,26 +746,12 @@ bool GraphicsProject::InitScene(){
 	cbbd.ByteWidth = sizeof(cbPerObject);
 	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	result = device->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
-	//	 per Tree
-	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
-	cbbd.Usage = D3D11_USAGE_DEFAULT;
-	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	cbbd.ByteWidth = sizeof(cbPerTree);
-	result = device->CreateBuffer(&cbbd, NULL, &cbPerTreeBuffer);
 	//	 per Frame
 	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
 	cbbd.Usage = D3D11_USAGE_DEFAULT;
 	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	cbbd.ByteWidth = sizeof(cbPerFrame);
 	result = device->CreateBuffer(&cbbd, NULL, &cbPerFrameBuffer);
-	//	per Scene
-	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
-	cbbd.Usage = D3D11_USAGE_DEFAULT;
-	cbbd.ByteWidth = sizeof(cbPerScene);
-	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	result = device->CreateBuffer(&cbbd, NULL, &cbPerInstanceBuffer);	
-
-	devContext->UpdateSubresource(cbPerInstanceBuffer, 0, NULL, &cbPerInst, 0, 0);
 #pragma endregion
 
 #pragma region IndexBuffer
@@ -1065,10 +1011,6 @@ bool GraphicsProject::Update() {
 	cube4World = Identity();
 	groundWorld = Identity();
 	barrelWorld = Identity();
-
-	cbPerInstTree.WVP = Identity();
-	cbPerInstTree.World = Identity();
-	cbPerInstTree.isLeaf = false;
 #pragma endregion
 
 #pragma region Define Worlds
@@ -1277,13 +1219,12 @@ bool GraphicsProject::Render(){
 
 		WVP = Mult_4x4(treeWorld, camView);
 		WVP = Mult_4x4(WVP, camProjection);
-		cbPerInstTree.World = treeWorld;
-		cbPerInstTree.WVP = WVP;
-		cbPerInstTree.isLeaf = false;
+		cbPerObj.World = treeWorld;
+		cbPerObj.WVP = WVP;
 
-		devContext->UpdateSubresource(cbPerTreeBuffer, 0, NULL, &cbPerInstTree, 0, 0);
-		devContext->VSSetConstantBuffers(0, 1, &cbPerTreeBuffer);
-		devContext->PSSetConstantBuffers(1, 1, &cbPerTreeBuffer);
+		devContext->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+		devContext->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+		devContext->PSSetConstantBuffers(1, 1, &cbPerObjectBuffer);
 
 		devContext->PSSetShaderResources(0, 1, &srvBark);
 		devContext->PSSetSamplers(0, 1, &ssCube);
@@ -1554,8 +1495,8 @@ void GraphicsProject::DetectInput(double time, float w, float h){
 	DIKeyboard->GetDeviceState(sizeof(keyboardState), (LPVOID)&keyboardState);
 
 	//	Movement amount per frame
-	float negMove = -(5.0f * (float)time);
-	float posMove = 5.0f * (float)time;
+	float negMove = -(20.0f * (float)time);
+	float posMove = 20.0f * (float)time;
 
 	float negRotate = -(5.0f * (float)time);
 	float posRotate = 5.0f * (float)time;
@@ -1683,8 +1624,6 @@ bool GraphicsProject::ShutDown() {
 
 	cbPerObjectBuffer->Release();
 	cbPerFrameBuffer->Release();
-	cbPerInstanceBuffer->Release();
-	cbPerTreeBuffer->Release();
 	
 	vbSkybox->Release();
 	vbCube->Release();
@@ -1759,7 +1698,6 @@ bool GraphicsProject::ShutDown() {
 	UnregisterClass(L"GraphicsProject", application);
 	return true;
 }
-
 
 
 

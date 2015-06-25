@@ -6,7 +6,6 @@
 #pragma comment (lib, "d3d11.lib")
 using namespace std;
 
-#define NUMLEAVESPERTREE	500
 #define NUMTREES	100
 
 
@@ -135,20 +134,8 @@ struct cbPerObject{
 	MATRIX4X4 World;
 };
 
-struct cbPerTree{
-	MATRIX4X4 WVP;
-	MATRIX4X4 World;
-
-	BOOL isLeaf;
-	FLOAT3 padding;
-};
-
 struct cbPerFrame{
 	Light light;
-};
-
-struct cbPerScene{
-	MATRIX4X4 leafOnTree[NUMLEAVESPERTREE];
 };
 
 #endif
