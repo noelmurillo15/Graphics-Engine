@@ -1,0 +1,6 @@
+{
+  "name": "3D Graphics Engine",
+  "tagline": "3D Graphics Engine Utilizing C++ and DirectX 9",
+  "body": "### Welcome to My Github Page.\r\nIn this project I worked on a 3D Graphics renderer from scratch. I was able to proceduraly draw an indexed triangle primitive. I also made an objloader that rendered indexed models which were loaded from files using multithreading.\r\nI created pixel and vertex shaders for ambient, spot, directional and point lights. I also added normal mapping using the shaders. I was able to draw multiple instances of a tree model and used frustum culling technique to optimize my renderer.\r\n\r\n### Author\r\nAllan Murillo (@noelmurillo15)\r\n",
+  "note": "Don't delete this file! It's used internally to help with page regeneration."
+}
